@@ -1545,6 +1545,11 @@ class VuePrevision {
     if (!Array.isArray(this.mensuelles)) this.mensuelles = [];
     if (!Array.isArray(this.journalieres)) this.journalieres = [];
     this.initialisationMensuelleFaite = false;
+    // Cache des agrégats Reçu : évite de reparcourir et reparsing toutes les lignes à chaque édition.
+    this.cacheCalculRecuMensuel = null;
+    this.cacheValeursRecu = new Map();
+    this.cacheDernierePeriodeRecu = undefined;
+    this.variationOptionsHTML = '<option value="">Choisir…</option>' + Array.from({ length: 201 }, (_, i) => i - 100).map(v => `<option value="${v}">${v > 0 ? `+${v}` : v} %</option>`).join("");
     this.journalieresCache = new Map(this.journalieres.map(l => [`${Number(l.annee)}-${Number(l.mois)}-${Number(l.jour)}|${String(l.traitement || "").trim()}`, l]));
     // Reprend les anciennes saisies (avant séparation des vues) dans le tableau mensuel.
     try {
@@ -1570,7 +1575,9 @@ class VuePrevision {
       const champ = document.querySelector("#forecastMonthlyAddCount");
       const nombre = Math.max(1, Math.min(100, Math.floor(Number(champ.value) || 1)));
       champ.value = String(nombre);
-      for (let i = 0; i < nombre; i++) this.ajouterLigne("mensuel");
+      for (let i = 0; i < nombre; i++) this.ajouterLigne("mensuel", { silencieux: true });
+      this.enregistrerHistorique("mensuel", this.mensuelles[this.mensuelles.length - 1] || {}, "Lignes", "—", `${nombre} lignes ajoutées`);
+      this.calculerPrevisionsMensuelles(); this.sauvegarder("mensuel"); this.actualiser("mensuel");
       Toast.afficher(`${nombre} ligne${nombre > 1 ? "s" : ""} ajoutée${nombre > 1 ? "s" : ""}`);
     });
     document.querySelector("#forecastMonthlyExport").addEventListener("click", () => this.exporter("mensuel"));
@@ -1579,13 +1586,14 @@ class VuePrevision {
     document.querySelector("#forecastMonthlyTab").addEventListener("click", () => this.changerOnglet("mensuel"));
     document.querySelector("#forecastDailyTab").addEventListener("click", () => this.changerOnglet("journalier"));
     document.querySelector("#forecastHistoryTab").addEventListener("click", () => this.changerOnglet("historique"));
-    document.addEventListener("recu:donnees-modifiees", () => { this.genererLignesMensuelles(); this.genererDatesJournalieres(); this.actualiserFiltresHistorique(); });
+    document.addEventListener("recu:donnees-modifiees", () => { this.cacheCalculRecuMensuel = null; this.cacheValeursRecu.clear(); this.cacheDernierePeriodeRecu = undefined; this.genererLignesMensuelles(); this.genererDatesJournalieres(); this.actualiserFiltresHistorique(); });
     document.addEventListener("recu:historique-modifie", () => this.actualiserFiltresHistorique());
     document.addEventListener("profil:change", () => {
       try { this.mensuelles = JSON.parse(localStorage.getItem(this.cleStockage("mensuel"))) || []; } catch { this.mensuelles = []; }
       try { this.journalieres = JSON.parse(localStorage.getItem(this.cleStockage("journalier"))) || []; } catch { this.journalieres = []; }
       this.journalieresCache = new Map(this.journalieres.map(l => [`${Number(l.annee)}-${Number(l.mois)}-${Number(l.jour)}|${String(l.traitement || "").trim()}`, l]));
       this.initialisationMensuelleFaite = false;
+      this.cacheCalculRecuMensuel = null; this.cacheValeursRecu.clear(); this.cacheDernierePeriodeRecu = undefined;
       this.genererLignesMensuelles(); this.genererDatesJournalieres(); this.actualiser(); this.actualiserFiltresHistorique();
     });
     if (!this.journalieres.length) this.journalieres.push(this.nouvelleLigne("journalier"));
@@ -1622,6 +1630,21 @@ class VuePrevision {
     }
     this.genererDatesJournalieres();
   }
+  obtenirDernierePeriodeRecu() {
+    if (this.cacheDernierePeriodeRecu !== undefined) return this.cacheDernierePeriodeRecu;
+    const donnees = this.obtenirFichierRecu?.()?.donnees || [];
+    const ordre = donnees.length ? VueBesoinHeure.detecterOrdre(donnees.map(l => l.Date)) : "jm";
+    let derniere = "";
+    for (const ligne of donnees) {
+      const iso = VueBesoinHeure.lireDate(ligne.Date, ordre);
+      if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        const periode = iso.slice(0, 7);
+        if (periode > derniere) derniere = periode;
+      }
+    }
+    this.cacheDernierePeriodeRecu = derniere;
+    return derniere;
+  }
   genererLignesMensuelles() {
     if (this.initialisationMensuelleFaite) {
       this.calculerPrevisionsMensuelles();
@@ -1629,14 +1652,9 @@ class VuePrevision {
       return;
     }
     const traitements = this.obtenirValeursRecu("traitement");
-    const fichierRecu = this.obtenirFichierRecu?.();
-    const donneesRecu = fichierRecu?.donnees || [];
-    const ordreDates = typeof VueBesoinHeure !== "undefined" ? VueBesoinHeure.detecterOrdre(donneesRecu.map(l => l.Date)) : "jm";
-    const moisRecu = donneesRecu.map(ligne => {
-      const iso = typeof VueBesoinHeure !== "undefined" ? VueBesoinHeure.lireDate(ligne.Date, ordreDates) : "";
-      return iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.slice(0, 7) : "";
-    }).filter(Boolean).sort();
-    const dernierePeriode = moisRecu.length ? moisRecu[moisRecu.length - 1] : `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+    const dernierePeriodeRecu = this.obtenirDernierePeriodeRecu();
+    const moisRecuExiste = Boolean(dernierePeriodeRecu);
+    const dernierePeriode = dernierePeriodeRecu || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     const [anneeInitiale, moisInitial] = dernierePeriode.split("-").map(Number);
     const dimensions = this.obtenirClientsCampagnes();
     const profil = dimensions[0] || { client: "", campagne: "" };
@@ -1657,7 +1675,7 @@ class VuePrevision {
       // Migration des anciennes vues qui généraient automatiquement tous les mois :
       // conserver les lignes de la période la plus récente, avec quatre traitements au maximum.
       const periodesExistantes = anciennes.map(l => `${String(Number(l.annee) || anneeInitiale).padStart(4, "0")}-${String(Number(l.mois) || moisInitial).padStart(2, "0")}`).sort();
-      const periodeAConserver = moisRecu.length ? dernierePeriode : (periodesExistantes[periodesExistantes.length - 1] || dernierePeriode);
+      const periodeAConserver = moisRecuExiste ? dernierePeriode : (periodesExistantes[periodesExistantes.length - 1] || dernierePeriode);
       const [anneeConservee, moisConserve] = periodeAConserver.split("-").map(Number);
       const lignesPeriode = anciennes.filter(l => (Number(l.annee) || anneeConservee) === anneeConservee && (Number(l.mois) || moisConserve) === moisConserve);
       const parTraitement = new Map(lignesPeriode.map(l => [String(l.traitement || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(), l]));
@@ -1677,28 +1695,35 @@ class VuePrevision {
   }
   calculerPrevisionsMensuelles() {
     if (!this.mensuelles?.length) return;
-    const fichier = this.obtenirFichierRecu?.();
-    const donnees = fichier?.donnees || [];
     const normaliser = valeur => String(valeur ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    const ordreDates = donnees.length ? VueBesoinHeure.detecterOrdre(donnees.map(l => l.Date)) : "DMY";
-    const volumesReels = new Map();
-    const moisAvecDonnees = new Set();
-    const lignesParsees = donnees.map(ligne => {
-      const iso = VueBesoinHeure.lireDate(ligne.Date, ordreDates);
-      const traitement = String(ligne.Statut ?? "").trim();
-      const valeur = VueBesoinHeure.lireNombre(ligne.Reçu);
-      return { iso, traitement, valeur };
-    }).filter(l => l.iso && l.traitement);
-    const volumeParLigne = !lignesParsees.some(l => l.valeur !== null && Number.isFinite(l.valeur));
-    lignesParsees.forEach(ligne => {
-      const mois = ligne.iso.slice(0, 7);
-      const cleTraitement = normaliser(ligne.traitement);
-      const cle = `${mois}|${cleTraitement}`;
-      moisAvecDonnees.add(cle);
-      const valeur = volumeParLigne ? 1 : ligne.valeur;
-      if (valeur === null || !Number.isFinite(valeur)) return;
-      volumesReels.set(cle, (volumesReels.get(cle) || 0) + valeur);
-    });
+    let indexRecu = this.cacheCalculRecuMensuel;
+    if (!indexRecu) {
+      const fichier = this.obtenirFichierRecu?.();
+      const donnees = fichier?.donnees || [];
+      const ordreDates = donnees.length ? VueBesoinHeure.detecterOrdre(donnees.map(l => l.Date)) : "DMY";
+      const lignesParsees = [];
+      let aDesValeursNumeriques = false;
+      for (const ligne of donnees) {
+        const iso = VueBesoinHeure.lireDate(ligne.Date, ordreDates);
+        const traitement = String(ligne.Statut ?? ligne.Traitement ?? "").trim();
+        if (!iso || !traitement) continue;
+        const valeur = VueBesoinHeure.lireNombre(ligne.Reçu);
+        if (valeur !== null && Number.isFinite(valeur)) aDesValeursNumeriques = true;
+        lignesParsees.push({ mois: iso.slice(0, 7), cleTraitement: normaliser(traitement), valeur });
+      }
+      const volumesReels = new Map(), moisAvecDonnees = new Set(), moisParTraitement = new Map();
+      for (const ligne of lignesParsees) {
+        const cle = `${ligne.mois}|${ligne.cleTraitement}`;
+        moisAvecDonnees.add(cle);
+        if (!moisParTraitement.has(ligne.cleTraitement)) moisParTraitement.set(ligne.cleTraitement, new Set());
+        moisParTraitement.get(ligne.cleTraitement).add(ligne.mois);
+        const valeur = aDesValeursNumeriques ? ligne.valeur : 1;
+        if (valeur === null || !Number.isFinite(valeur)) continue;
+        volumesReels.set(cle, (volumesReels.get(cle) || 0) + valeur);
+      }
+      indexRecu = this.cacheCalculRecuMensuel = { volumesReels, moisAvecDonnees, moisParTraitement };
+    }
+    const { volumesReels, moisAvecDonnees, moisParTraitement } = indexRecu;
 
     const parTraitement = new Map();
     this.mensuelles.forEach(ligne => {
@@ -1727,7 +1752,7 @@ class VuePrevision {
 
     parTraitement.forEach((groupe, cleTraitement) => {
       const periodesLignes = [...groupe.periodes.keys()].sort();
-      const periodesRecu = [...moisAvecDonnees].filter(cle => cle.endsWith(`|${cleTraitement}`)).map(cle => cle.slice(0, 7)).sort();
+      const periodesRecu = [...(moisParTraitement.get(cleTraitement) || [])].sort();
       const toutesPeriodes = [...periodesLignes, ...periodesRecu].sort();
       if (!toutesPeriodes.length) {
         groupe.periodes.forEach(lignes => lignes.forEach(ligne => { ligne.previsionPrise = 0; }));
@@ -1887,22 +1912,21 @@ class VuePrevision {
     const compteur = document.querySelector(type === "journalier" ? "#forecastDailyCount" : "#forecastMonthlyCount");
     if (compteur) { const n = this.lignes(type).length; compteur.textContent = `${n} ligne${n > 1 ? "s" : ""}`; }
   }
-  ajouterLigne(type) {
+  ajouterLigne(type, options = {}) {
     const ligne = this.nouvelleLigne(type);
     if (type === "mensuel") {
-      const fichier = this.obtenirFichierRecu?.();
-      const donnees = fichier?.donnees || [];
-      const ordreDates = typeof VueBesoinHeure !== "undefined" ? VueBesoinHeure.detecterOrdre(donnees.map(l => l.Date)) : "jm";
-      const periodes = donnees.map(l => { const iso = typeof VueBesoinHeure !== "undefined" ? VueBesoinHeure.lireDate(l.Date, ordreDates) : ""; return iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.slice(0, 7) : ""; }).filter(Boolean).sort();
-      if (periodes.length) { const [a, m] = periodes[periodes.length - 1].split("-"); ligne.annee = a; ligne.mois = String(Number(m)); }
+      const dernierePeriode = this.obtenirDernierePeriodeRecu();
+      if (dernierePeriode) { const [a, m] = dernierePeriode.split("-"); ligne.annee = a; ligne.mois = String(Number(m)); }
       const traitements = this.obtenirValeursRecu("traitement");
       const utilises = new Set(this.mensuelles.filter(l => Number(l.mois) === Number(ligne.mois) && Number(l.annee) === Number(ligne.annee)).map(l => String(l.traitement || "").trim().toLocaleLowerCase("fr")));
       ligne.traitement = traitements.find(t => !utilises.has(String(t).trim().toLocaleLowerCase("fr"))) || "";
     }
     this.lignes(type).push(ligne);
-    this.enregistrerHistorique(type, ligne, "Ligne", "—", "Créée manuellement");
-    if (type === "mensuel") this.calculerPrevisionsMensuelles();
-    this.sauvegarder(type); this.actualiser();
+    if (!options.silencieux) this.enregistrerHistorique(type, ligne, "Ligne", "—", "Créée manuellement");
+    if (!options.silencieux) {
+      if (type === "mensuel") this.calculerPrevisionsMensuelles();
+      this.sauvegarder(type); this.actualiser(type);
+    }
   }
   changerOnglet(type) {
     const mensuel = type === "mensuel", journalier = type === "journalier", historique = type === "historique";
@@ -1926,14 +1950,14 @@ class VuePrevision {
     input.dataset.lastLoggedValue = valeurInitiale;
     input.addEventListener("change", () => { this.enregistrerHistorique(typeVue, ligne, label || cle, input.dataset.lastLoggedValue, input.value); input.dataset.lastLoggedValue = input.value; });
     if (cle === "annee" && typeVue === "journalier") input.addEventListener("change", () => this.actualiser());
-    if (cle === "annee" && typeVue === "mensuel") input.addEventListener("change", () => { this.calculerPrevisionsMensuelles(); this.actualiser(); });
-    if (cle === "fluxPrevu") input.addEventListener("change", () => { if (typeVue === "mensuel") this.calculerPrevisionsMensuelles(); this.actualiser(); });
+    if (cle === "annee" && typeVue === "mensuel") input.addEventListener("change", () => { this.calculerPrevisionsMensuelles(); this.sauvegarder(typeVue); this.actualiser(typeVue); });
+    if (cle === "fluxPrevu") input.addEventListener("change", () => { if (typeVue === "mensuel") this.calculerPrevisionsMensuelles(); this.sauvegarder(typeVue); this.actualiser(typeVue); });
     return input;
   }
   creerMois(ligne, typeVue) {
     const select = document.createElement("select"); select.className = "hyp-input forecast-select forecast-month-select"; select.setAttribute("aria-label", "Mois");
     ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"].forEach((nom, i) => { const opt = document.createElement("option"); opt.value = String(i + 1); opt.textContent = nom; select.append(opt); });
-    select.value = String(ligne.mois || "1"); select.addEventListener("change", () => { ligne.mois = select.value; this.sauvegarder(typeVue); if (typeVue === "journalier") this.actualiser(); else { this.calculerPrevisionsMensuelles(); this.actualiser(); } }); return select;
+    select.value = String(ligne.mois || "1"); select.addEventListener("change", () => { ligne.mois = select.value; this.sauvegarder(typeVue); if (typeVue === "journalier") this.actualiser(typeVue); else { this.calculerPrevisionsMensuelles(); this.actualiser(typeVue); } }); return select;
   }
   creerSelectTraitement(ligne, typeVue) {
     const select = document.createElement("select");
@@ -1950,11 +1974,12 @@ class VuePrevision {
       this.enregistrerHistorique(typeVue, ligne, "Traitement", ancienne, ligne.traitement);
       this.sauvegarder(typeVue);
       if (typeVue === "mensuel") this.calculerPrevisionsMensuelles();
-      this.actualiser();
+      this.actualiser(typeVue);
     });
     return select;
   }
   obtenirValeursRecu(cle) {
+    if (this.cacheValeursRecu.has(cle)) return this.cacheValeursRecu.get(cle);
     const fichier = this.obtenirFichierRecu?.();
     const normaliser = valeur => String(valeur ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const candidats = cle === "traitement"
@@ -1977,7 +2002,9 @@ class VuePrevision {
       const cleUnique = normaliser(valeur);
       if (!valeursUniques.has(cleUnique)) valeursUniques.set(cleUnique, valeur);
     });
-    return [...valeursUniques.values()].sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+    const resultat = [...valeursUniques.values()].sort((a, b) => a.localeCompare(b, "fr", { sensitivity: "base" }));
+    this.cacheValeursRecu.set(cle, resultat);
+    return resultat;
   }
   creerSelectRecu(ligne, cle, colonneRecu, label, typeVue) {
     const select = document.createElement("select"); select.className = "hyp-input forecast-select"; select.setAttribute("aria-label", label);
@@ -2018,7 +2045,7 @@ class VuePrevision {
       this.sauvegarder(typeVue);
       this.enregistrerHistorique(typeVue, ligne, cle === "client" ? "Client" : "Campagne", select.dataset.lastLoggedValue, select.value);
       select.dataset.lastLoggedValue = select.value;
-      this.actualiser();
+      this.actualiser(typeVue);
     });
     return select;
   }
@@ -2061,16 +2088,11 @@ class VuePrevision {
       const variation = document.createElement("select"); variation.className = "hyp-input forecast-select forecast-variation-select";
       variation.setAttribute("aria-label", "Variation en pourcentage de -100 % à +100 %");
       variation.title = "Choisir une variation de -100 % à +100 %, par pas de 1 %";
-      const choixVariation = document.createElement("option"); choixVariation.value = ""; choixVariation.textContent = "Choisir…"; variation.append(choixVariation);
-      for (let valeur = -100; valeur <= 100; valeur++) {
-        const option = document.createElement("option"); option.value = String(valeur);
-        option.textContent = valeur > 0 ? `+${valeur} %` : `${valeur} %`;
-        variation.append(option);
-      }
+      variation.innerHTML = this.variationOptionsHTML;
       const variationStockee = ligne.variation === "" || ligne.variation == null ? "" : String(Number(ligne.variation));
       variation.value = [...variation.options].some(option => option.value === variationStockee) ? variationStockee : "";
       variation.dataset.lastLoggedValue = variation.value;
-      variation.addEventListener("change", () => { const ancienne = variation.dataset.lastLoggedValue; ligne.variation = variation.value; this.sauvegarder(typeVue); this.enregistrerHistorique(typeVue, ligne, "Variation (%)", ancienne, variation.value); variation.dataset.lastLoggedValue = variation.value; if (typeVue === "mensuel") this.calculerPrevisionsMensuelles(); this.actualiser(); });
+      variation.addEventListener("change", () => { const ancienne = variation.dataset.lastLoggedValue; ligne.variation = variation.value; this.sauvegarder(typeVue); this.enregistrerHistorique(typeVue, ligne, "Variation (%)", ancienne, variation.value); variation.dataset.lastLoggedValue = variation.value; if (typeVue === "mensuel") this.calculerPrevisionsMensuelles(); this.actualiser(typeVue); });
       tr.append(this.creerCellule(variation));
       const attente = document.createElement("span");
       const fluxPrevu = ligne.fluxPrevu === "" || ligne.fluxPrevu == null ? NaN : Number(ligne.fluxPrevu);
@@ -2096,7 +2118,7 @@ class VuePrevision {
           details: [["Période", periode], ["Traitement", ligne.traitement || "—"], ["Flux prévu", ligne.fluxPrevu === "" || ligne.fluxPrevu == null ? "—" : ligne.fluxPrevu]],
           libelleConfirmer: "Supprimer", ton: "danger", icone: "⌫"
         });
-        if (confirme) { this.enregistrerHistorique(typeVue, ligne, "Ligne", "Présente", "Supprimée"); lignes.splice(lignes.indexOf(ligne), 1); if (typeVue === "mensuel") this.calculerPrevisionsMensuelles(); this.sauvegarder(typeVue); this.actualiser(); }
+        if (confirme) { this.enregistrerHistorique(typeVue, ligne, "Ligne", "Présente", "Supprimée"); lignes.splice(lignes.indexOf(ligne), 1); if (typeVue === "mensuel") this.calculerPrevisionsMensuelles(); this.sauvegarder(typeVue); this.actualiser(typeVue); }
       });
       tr.append(this.creerCellule(supprimer)); body.append(tr);
     });
@@ -2109,7 +2131,11 @@ class VuePrevision {
     }
     table.append(body); wrap.replaceChildren(table); this.sauvegarder(typeVue);
   }
-  actualiser() { this.afficherTable("mensuel"); this.afficherTable("journalier"); this.afficherHistorique(); }
+  actualiser(typeVue = null) {
+    if (typeVue === "mensuel") { this.afficherTable("mensuel"); return; }
+    if (typeVue === "journalier") { this.afficherTable("journalier"); return; }
+    this.afficherTable("mensuel"); this.afficherTable("journalier"); this.afficherHistorique();
+  }
   exporter(typeVue) {
     const mois = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
     const journalier = typeVue === "journalier";

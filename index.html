@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Application de traitement des fichiers reçus et de dimensionnement des besoins.">
+  <title>Dimensionnement — Analyse des besoins</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap">
+  <!-- Tailwind CSS (Play CDN) : une connexion Internet est nécessaire, comme pour SheetJS. -->
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['"DM Sans"', 'system-ui', 'sans-serif'], display: ['Manrope', '"DM Sans"', 'sans-serif'] },
+          colors: {
+            ink: '#17283f', muted: '#6e7b8c', line: '#e3e8ef', canvas: '#f5f7fa',
+            brand: { DEFAULT: '#1A214D', hover: '#141a3d', soft: '#F1F5F9', tint: '#F8FAFC', border: '#D8DEE8', mid: '#1A214D' },
+            gold: { DEFAULT: '#FF491B', dark: '#D83A12' }
+          },
+          boxShadow: { card: '0 10px 35px rgba(23,40,33,.045)' }
+        }
+      }
+    };
+  </script>
+  <style type="text/tailwindcss">
+    @layer base {
+      body { @apply bg-canvas font-sans text-[14px] text-ink antialiased; }
+    }
+    @layer components {
+      /* Navigation */
+      .nav-item { @apply flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-[13px] font-semibold text-[#64748B] transition enabled:hover:bg-canvas enabled:hover:text-brand disabled:cursor-not-allowed disabled:opacity-50; }
+      .nav-item.active { @apply bg-brand-soft font-bold text-brand; }
+      .nav-icon { @apply w-5 text-center text-lg; }
+      .nav-pill { @apply ml-auto rounded-md bg-brand px-1.5 py-0.5 text-[10px] font-bold text-white; }
+      .soon { @apply ml-auto text-[9px] uppercase tracking-wide; }
+      #sidebar.open { @apply translate-x-0 shadow-2xl; }
+
+      /* Boutons */
+      .button { @apply inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent px-3.5 py-2.5 text-[11px] font-bold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-brand-soft disabled:cursor-not-allowed disabled:opacity-40; }
+      .button-primary { @apply bg-brand text-white enabled:hover:bg-brand-hover; }
+      .button-secondary { @apply border-[#e0e6e1] bg-white text-[#65716a] enabled:hover:bg-canvas; }
+      .button.is-active { @apply border-brand-border bg-brand-soft text-brand; }
+
+      /* Blocs */
+      .eyebrow { @apply mb-2 text-[10px] font-bold uppercase tracking-[.14em] text-gold-dark; }
+      .drop-zone { @apply relative flex min-h-[190px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-[#cbd6cd] bg-[#fafcfb] p-6 text-center transition hover:border-brand-mid hover:bg-[#f1f7f2]; }
+      .drop-zone.dragover { @apply border-brand-mid bg-[#f1f7f2]; }
+      .drop-zone strong { @apply font-display text-[13px] font-bold; }
+      .drop-zone span { @apply text-[11px] text-muted; }
+      .drop-zone u { @apply font-bold text-brand underline-offset-4; }
+      .drop-zone small { @apply text-[10px] text-[#9aa39d]; }
+      .upload-icon { @apply grid h-11 w-11 place-items-center rounded-xl bg-brand-soft text-2xl font-medium text-brand; }
+      .empty-state { @apply flex min-h-[205px] flex-col items-center justify-center p-6 text-center; }
+      .empty-state strong { @apply font-display text-xs font-bold; }
+      .empty-state p { @apply mt-1 max-w-sm text-[11px] leading-relaxed text-muted; }
+      .empty-icon { @apply mb-3 grid h-11 w-11 place-items-center rounded-xl bg-brand-tint text-2xl text-[#8a9c8e]; }
+      .notice { @apply mb-5 flex items-start gap-3 rounded-xl border border-[#e8e3d6] bg-[#fbfaf6] p-4 text-[#7d786b]; }
+      .notice p { @apply m-0 text-[11px] leading-relaxed; }
+      .notice strong { @apply text-[#625a49]; }
+      .notice-icon { @apply grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#f0eadb] text-xs font-bold text-gold-dark; }
+
+      /* Tableaux */
+      .data-table { @apply w-full border-collapse whitespace-nowrap text-[11px]; }
+      .data-table th { @apply sticky top-0 z-[2] border-b border-line bg-canvas px-3.5 py-3 text-left text-[10px] font-bold tracking-wide text-[#68756d]; }
+      .data-table td { @apply max-w-[260px] truncate border-b border-[#edf0ed] bg-inherit px-3.5 py-3; }
+      .data-table tbody tr { @apply bg-white transition-colors hover:bg-[#fafcfb]; }
+      .data-table tbody tr:last-child td { @apply border-b-0; }
+      .data-table th.row-number { @apply left-0 z-[4] w-11; }
+      .data-table td.row-number { @apply sticky left-0 z-[1] w-11 text-[#a0aaa3]; }
+      .data-table td.editable-cell { @apply min-w-[95px] cursor-text transition hover:bg-brand-tint focus-visible:bg-[#f5f8f5] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#789b82]; }
+      .data-table td.is-editing { @apply overflow-visible bg-[#fffdf7] p-1.5 shadow-[inset_0_0_0_2px_#c5a76a]; }
+      .data-table td.cell-saved { @apply bg-[#edf7ef]; }
+      .data-table th.old-status-column { @apply bg-brand-soft text-[#315b43]; }
+      .data-table td.old-status-column { @apply min-w-[125px] border-l border-l-[#e3e9e2] bg-[#fbfcf8]; }
+      .cell-editor { @apply w-full min-w-[90px] bg-transparent px-2 py-1.5 text-ink outline-none; font: inherit; }
+
+      /* Hypothèses & jours fériés */
+      .hyp-table th { @apply whitespace-normal; min-width: 120px; }
+      .hyp-table td { @apply max-w-none overflow-visible align-middle; }
+      .hyp-table th:first-child { @apply left-0 z-[4] min-w-[180px]; }
+      .hyp-table td:first-child { @apply sticky left-0 z-[1] min-w-[180px]; }
+      .hyp-name strong { @apply block text-xs text-ink; }
+      .hyp-name small { @apply mt-0.5 block text-[10px] text-muted; }
+      .hyp-input { @apply min-h-[38px] w-full min-w-[92px] rounded-lg border border-[#e2e7e2] bg-white px-2.5 py-2 text-xs text-ink outline-none transition hover:border-[#cdd9cf] focus:border-[#86a28d] focus:ring-4 focus:ring-brand-soft; }
+      .hyp-input.is-invalid { @apply border-red-400 ring-4 ring-red-100; }
+      .hyp-dmt-input { @apply min-w-[110px] text-center tabular-nums; }
+      .fer-jour { @apply capitalize text-muted; }
+
+      /* Modale */
+      .edit-form { @apply grid gap-2; }
+      .edit-form label { @apply mt-1 text-[11px] font-bold text-[#58665d]; }
+      .edit-form input, .edit-form select { @apply min-h-[42px] w-full rounded-lg border border-[#dfe6df] bg-white px-3 py-2.5 text-xs text-ink outline-none focus:border-[#8aaa92] focus:ring-4 focus:ring-brand-soft; }
+    }
+  </style>
+  <link rel="stylesheet" href="styles.css">
+  <!-- SheetJS permet la lecture des fichiers Excel .xlsx. Une connexion Internet est nécessaire pour charger cette bibliothèque. -->
+  <script defer src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <div class="min-h-screen">
+    <div id="sidebarOverlay" class="hidden fixed inset-0 z-40 bg-ink/40 backdrop-blur-sm lg:hidden"></div>
+
+    <aside id="sidebar" class="fixed inset-y-0 left-0 z-50 flex w-64 -translate-x-full flex-col border-r border-line bg-white px-4 py-7 transition-transform duration-200 lg:translate-x-0">
+      <a class="mb-9 flex items-center gap-3 px-2" href="#" aria-label="Dimensionnement accueil">
+        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand font-display text-xl font-extrabold text-white shadow-[0_5px_14px_rgba(23,61,50,.15)]">D</span>
+        <span class="min-w-0"><strong class="block font-display text-[12.5px] font-extrabold tracking-[.08em]">DIMENSIONNEMENT</strong><small class="mt-0.5 block text-[11px] text-muted">Analyse des besoins</small></span>
+      </a>
+      <div class="px-3 pb-3 text-[10px] font-bold tracking-[.14em] text-[#87918b]">ESPACE DE TRAVAIL</div>
+      <nav class="grid gap-1.5" aria-label="Navigation principale">
+        <button class="nav-item" data-view="dashboard"><span class="nav-icon">▦</span> Tableau de bord</button>
+        <button class="nav-item active" data-view="recu"><span class="nav-icon">⇧</span> REÇU <span class="nav-pill">01</span></button>
+        <button class="nav-item" data-view="archive"><span class="nav-icon">▤</span> Archive Import <span class="nav-pill">02</span></button>
+        <button class="nav-item" data-view="hypotheses"><span class="nav-icon">☷</span> Hypothèses <span class="nav-pill">02</span></button>
+        <button class="nav-item" data-view="feries"><span class="nav-icon">◷</span> Jours fériés <span class="nav-pill">03</span></button>
+        <button class="nav-item" data-view="prevision"><span class="nav-icon">◷</span> Prévision <span class="nav-pill">04</span></button>
+        <button class="nav-item" data-view="besoin"><span class="nav-icon">▥</span> Besoin en heure <span class="nav-pill">05</span></button>
+
+        <button class="nav-item" data-view="resultats" disabled title="Disponible dans une prochaine étape"><span class="nav-icon">⌁</span> Résultats <span class="soon">Bientôt</span></button>
+      </nav>
+      <div class="mt-auto flex items-start gap-2.5 border-t border-line px-2 pt-5">
+        <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#4b9b72]"></span>
+        <div><strong class="block text-xs">Traitement local</strong><small class="mt-1 block text-[10px] leading-relaxed text-muted">Les fichiers restent sur cet appareil</small></div>
+      </div>
+    </aside>
+
+    <main class="flex min-h-screen flex-col lg:ml-64">
+      <header class="sticky top-0 z-30 flex h-16 items-center justify-between gap-3 border-b border-line bg-white/85 px-4 backdrop-blur-md sm:px-6 lg:px-10">
+        <button class="grid h-9 w-9 place-items-center rounded-lg text-xl text-brand hover:bg-brand-soft lg:hidden" id="mobileMenu" aria-label="Ouvrir le menu">☰</button>
+        <div class="header-workspace mr-auto flex min-w-0 items-center gap-3 text-xs text-[#8b958f]">
+          <div class="shrink-0">Espace de travail <span class="px-1.5 text-[#c4cbc6]">/</span> <strong class="font-bold text-ink" id="breadcrumbCurrent">REÇU</strong></div>
+          <div id="besoinHeaderContext" class="besoin-header-context" aria-label="Contexte actif : client, campagne et fichier">
+            <div class="besoin-header-item besoin-header-client" title="Client en cours"><span class="besoin-header-label">CLIENT</span><strong id="besoinActiveClient" class="besoin-header-value">Non renseigné</strong></div>
+            <div class="besoin-header-item besoin-header-campaign" title="Campagne en cours"><span class="besoin-header-label">CAMPAGNE</span><strong id="besoinActiveCampaign" class="besoin-header-value">Non renseignée</strong></div>
+            <div class="besoin-header-item besoin-header-file" title="Fichier actuel"><span class="besoin-header-label">FICHIER ACTUEL</span><strong id="besoinCurrentFile" class="besoin-header-value">Aucun fichier chargé</strong></div>
+          </div>
+        </div>
+        <div class="header-status flex shrink-0 items-center gap-2 text-[11px] text-[#7b867f]"><span class="h-2 w-2 rounded-full bg-[#4b9b72]"></span><span class="hidden sm:inline">Application locale</span><span class="ml-2 grid h-8 w-8 place-items-center rounded-full bg-brand-soft font-bold text-brand">D</span></div>
+      </header>
+
+      <!-- ========== REÇU ========== -->
+      <section class="page-view mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9" id="recuView">
+        <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div class="eyebrow">GESTION DES FICHIERS</div>
+            <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Fichiers reçus</h1>
+            <p class="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Importez vos données, contrôlez leur structure et préparez-les pour le calcul des besoins.</p>
+          </div>
+          <span class="hidden w-fit whitespace-nowrap rounded-lg border border-[#e0e6e0] bg-white px-3 py-2.5 text-[9px] font-bold tracking-[.08em] text-[#748078] sm:inline-block" id="todayLabel">ESPACE DE TRAITEMENT</span>
+        </div>
+
+        <div id="validationBanner" class="hidden mb-5" role="alert" aria-live="assertive"></div>
+
+        <div class="recu-workflow mb-4" aria-label="Parcours de traitement">
+          <div class="recu-workflow-title">PARCOURS DE TRAITEMENT</div>
+          <div class="recu-workflow-steps">
+            <div class="recu-workflow-step"><span class="recu-workflow-number">1</span><span><strong>Importer</strong><small>Excel ou CSV</small></span></div>
+            <span class="recu-workflow-arrow" aria-hidden="true">›</span>
+            <div class="recu-workflow-step"><span class="recu-workflow-number">2</span><span><strong>Vérifier</strong><small>Colonnes et données</small></span></div>
+            <span class="recu-workflow-arrow" aria-hidden="true">›</span>
+            <div class="recu-workflow-step"><span class="recu-workflow-number">3</span><span><strong>Exploiter</strong><small>Modifier ou exporter</small></span></div>
+          </div>
+        </div>
+        <div class="hidden" aria-hidden="true">
+          <span id="metricFiles">0</span><span id="metricRows">0</span><span id="metricColumns">0</span>
+          <span id="metricState">En attente</span><span id="metricStateDetail">Aucun fichier chargé</span>
+        </div>
+
+
+
+        <section class="panel recu-import-panel mb-4 rounded-2xl border border-line bg-white p-3 shadow-card sm:p-4" aria-label="Importation des données">
+          <div class="recu-import-heading">
+            <div class="flex min-w-0 items-center gap-2"><span class="recu-import-step">01</span><div class="min-w-0"><h2 class="font-display text-[14px] font-bold">Importer</h2><p class="text-[10px] text-[#89938d]">Choisissez votre source : fichier local ou base Azure SQL Database.</p></div></div>
+            <span class="recu-local-badge"><span>●</span> 2 modes d’import</span>
+          </div>
+          <div class="recu-import-options">
+            <div class="recu-import-option recu-file-option">
+              <div class="recu-option-title"><span class="recu-option-icon" aria-hidden="true">↑</span><div><strong>Depuis votre ordinateur</strong><small>Excel (.xlsx, .xls) ou CSV (.csv)</small></div></div>
+              <label class="drop-zone" id="dropZone" for="fileInput" aria-label="Choisir un fichier Excel ou CSV, ou le déposer ici">
+                <span class="upload-icon" aria-hidden="true">↑</span>
+                <span class="drop-zone-copy"><strong>Glissez votre fichier ici</strong><small>ou <u>parcourez votre ordinateur</u></small></span>
+                <span class="drop-zone-format">Excel · CSV</span>
+                <input class="sr-only" type="file" id="fileInput" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+              </label>
+            </div>
+            <div class="recu-import-option recu-azure-option">
+              <div class="recu-option-title"><span class="recu-option-icon recu-azure-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M13.2 3.5h4.2L23 14.1h-4.3l-2.1-4-3.4 6.2H5.8l7.4-12.8Z" fill="currentColor"/><path d="M2 17.2h12.3l-2.2 3.3H4.1L2 17.2Z" fill="currentColor" opacity=".55"/></svg></span><div><strong>Depuis Azure SQL Database</strong><small>Connectez une table ou une vue via le service serveur.</small></div></div>
+              <div class="recu-azure-action"><span class="azure-demo-tag"><span></span> Connecteur Azure</span><button type="button" class="button button-primary" id="openAzureDemo">Configurer l’import Azure <span aria-hidden="true">↗</span></button></div>
+              <p class="recu-azure-hint">Les identifiants restent côté serveur. La connexion réelle nécessite une API Azure configurée.</p>
+            </div>
+          </div>
+          <div class="recu-import-footer"><span class="min-w-0" id="fileStatus" role="status">Aucun fichier sélectionné</span><button class="button button-secondary" id="clearFile" disabled>Réinitialiser</button></div>
+        </section>
+
+        <section class="panel preview-panel mb-5 rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex items-start gap-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-soft font-display text-[11px] font-bold text-brand">02</span><div><h2 class="font-display text-[15px] font-bold">Aperçu des données</h2><p class="mt-1 max-w-xl text-[11px] text-[#89938d]" id="previewDescription">Le contenu du fichier apparaîtra ici après l'importation. Utilisez les boutons Modifier pour intervenir sans perturber la lecture du tableau.</p></div></div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input type="search" id="searchInput" placeholder="Rechercher dans l'aperçu…" aria-label="Rechercher dans l'aperçu" disabled class="min-h-[38px] w-full rounded-lg border border-[#e2e7e2] bg-white px-3 py-2 text-[11px] outline-none transition focus:border-[#86a28d] focus:ring-4 focus:ring-brand-soft disabled:opacity-50 sm:w-52">
+              <button class="button button-secondary" id="editModeButton" disabled aria-pressed="false">✎ Modifier les cellules</button>
+              <button class="button button-secondary" id="bulkEditButton" disabled>Modifier une colonne</button>
+              <button class="button button-primary" id="exportCsv" disabled>Exporter CSV ↗</button>
+            </div>
+          </div>
+          <div class="table-wrap max-h-[460px] min-h-[205px] w-full overflow-auto rounded-xl border border-[#edf0ed]" id="tableWrap">
+            <div class="empty-state"><span class="empty-icon">▤</span><strong>Aucune donnée à afficher</strong><p>Importez un fichier pour vérifier les colonnes et les premières lignes.</p></div>
+          </div>
+          <div class="recu-table-footer">
+            <div class="recu-table-summary"><span id="tableCount">0 ligne</span><span id="editHint">Mode lecture · Utilisez la pagination pour parcourir toutes les lignes</span></div>
+            <nav class="recu-pagination" id="recuPagination" aria-label="Pagination de l’aperçu des données">
+              <label for="recuPageSize">Lignes par page</label>
+              <select id="recuPageSize" aria-label="Nombre de lignes par page"><option value="50">50</option><option value="100" selected>100</option><option value="250">250</option><option value="500">500</option></select>
+              <button type="button" id="recuPageFirst" class="recu-page-button" aria-label="Première page" title="Première page">«</button>
+              <button type="button" id="recuPagePrev" class="recu-page-button" aria-label="Page précédente" title="Page précédente">‹</button>
+              <span id="recuPageInfo" class="recu-page-info" aria-live="polite">Page 1 / 1</span>
+              <button type="button" id="recuPageNext" class="recu-page-button" aria-label="Page suivante" title="Page suivante">›</button>
+              <button type="button" id="recuPageLast" class="recu-page-button" aria-label="Dernière page" title="Dernière page">»</button>
+            </nav>
+          </div>
+        </section>
+
+        <div class="notice"><span class="notice-icon">i</span><p><strong>À savoir</strong> — Cette version permet l'importation, l'aperçu, l'export CSV, la saisie des hypothèses et la gestion des jours fériés. Les indicateurs de besoins seront ajoutés après validation des règles de calcul de votre fichier source.</p></div>
+      </section>
+
+      <!-- ========== ARCHIVE IMPORT ========== -->
+      <section class="page-view hidden mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9" id="archiveView">
+        <div class="mb-6">
+          <div class="eyebrow">ARCHIVAGE ET RESTAURATION</div>
+          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Archive Import</h1>
+          <p class="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Retrouvez les fichiers reçus par client et campagne, ouvrez une campagne ou supprimez un dossier devenu inutile.</p>
+        </div>
+        <section class="panel mb-5 rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6" aria-labelledby="clientCampaignTreeTitle">
+          <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div><div class="eyebrow">ARCHIVE DES IMPORTS</div><h2 id="clientCampaignTreeTitle" class="font-display text-[15px] font-bold">Clients et campagnes</h2><p class="mt-1 text-[11px] text-[#89938d]">Ouvrez un client, puis une campagne, pour retrouver ses fichiers reçus et leurs versions précédentes. Utilisez l’icône de suppression pour retirer un dossier.</p></div>
+            <span id="clientCampaignTreeCount" class="rounded-full bg-brand-soft px-3 py-1.5 text-[10px] font-bold text-brand">0 client · 0 campagne</span>
+          </div>
+          <div id="clientCampaignTree" class="client-campaign-tree" aria-live="polite"><div class="tree-empty">Les clients et campagnes apparaîtront après le premier import.</div></div>
+          <p class="mt-3 text-[10px] text-muted">Convention du profil : <strong>CLIENT_CAMPAGNE</strong>. Chaque campagne conserve son fichier courant et l’historique de ses anciens imports.</p>
+        </section>
+      </section>
+
+      <!-- ========== TABLEAU DE BORD ========== -->
+      <section class="page-view hidden mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9" id="dashboardView">
+        <div class="mb-6">
+          <div class="eyebrow">PILOTAGE DE L’ACTIVITÉ</div>
+          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Tableau de bord</h1>
+          <p class="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Les indicateurs essentiels pour vérifier les données reçues et préparer le dimensionnement.</p>
+        </div>
+
+        <section class="mb-4 flex flex-col gap-3 rounded-2xl border border-line bg-white p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-label="Fichier actif">
+          <div class="min-w-0">
+            <span class="text-[10px] font-bold uppercase tracking-[.12em] text-muted">Fichier actif · REÇU</span>
+            <strong class="mt-1 block truncate font-display text-base font-bold text-ink" id="dashFichier">Aucun fichier</strong>
+            <p class="mt-1 text-[11px] text-[#98a19b]" id="dashFichierDetail">Importez un fichier dans REÇU pour commencer.</p>
+          </div>
+          <button class="button button-primary shrink-0" data-view="recu">Importer / consulter REÇU →</button>
+        </section>
+
+        <div class="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-5" aria-label="Indicateurs clés">
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+            <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Lignes reçues</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">▤</span></div>
+            <strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="dashRows">0</strong>
+            <small class="text-[10px] text-[#98a19b]" id="dashRowsDetail">Aucune donnée importée</small>
+          </article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+            <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Clients enregistrés</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">♙</span></div>
+            <strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="dashClients">0</strong>
+            <small class="text-[10px] text-[#98a19b]" id="dashClientsDetail">Aucun client enregistré</small>
+          </article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+            <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Traitements détectés</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">☷</span></div>
+            <strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="dashTreatments">0</strong>
+            <small class="text-[10px] text-[#98a19b]" id="dashTreatmentsDetail">Aucun traitement détecté</small>
+          </article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+            <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Hypothèses complètes</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">✓</span></div>
+            <strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="dashTraitements">0 / 0</strong>
+            <small class="text-[10px] text-[#98a19b]" id="dashTraitementsDetail">Aucune hypothèse renseignée</small>
+            <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-brand-soft" role="progressbar" aria-label="Avancement des hypothèses" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="dashBarWrap"><div id="dashBar" class="h-full rounded-full bg-gradient-to-r from-brand-mid to-brand transition-all duration-500" style="width:0%"></div></div>
+          </article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5">
+            <div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>À compléter</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">!</span></div>
+            <strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="dashRemaining">0</strong>
+            <small class="text-[10px] text-[#98a19b]" id="dashRemainingDetail">Aucune action en attente</small>
+            <button class="button button-secondary mt-3 self-start" data-view="hypotheses">Compléter les hypothèses →</button>
+          </article>
+        </div>
+      </section>
+
+      <!-- ========== HYPOTHÈSES ========== -->
+      <section class="page-view hidden mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9" id="hypothesesView">
+        <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div class="eyebrow">PARAMÈTRES DE CALCUL</div>
+            <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Hypothèses</h1>
+            <p class="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Une ligne par traitement, issue de la colonne Statut du fichier reçu. Tous les champs sont modifiables et conservés automatiquement.</p>
+          </div>
+          <button class="button button-secondary self-start sm:self-auto" id="hypReset" disabled>Réinitialiser les hypothèses</button>
+        </div>
+        <section class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-5 flex items-start gap-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-soft font-display text-[11px] font-bold text-brand">01</span><div><h2 class="font-display text-[15px] font-bold">Paramètres par traitement</h2><p class="mt-1 text-[11px] text-[#89938d]" id="hypDescription">Importez d'abord un fichier dans REÇU pour générer la liste des traitements.</p></div></div>
+          <div class="table-wrap max-h-[560px] min-h-[205px] w-full overflow-auto rounded-xl border border-[#edf0ed]" id="hypTableWrap">
+            <div class="empty-state"><span class="empty-icon">☷</span><strong>Aucun traitement disponible</strong><p>Les traitements apparaissent après l'importation d'un fichier contenant la colonne Statut.</p></div>
+          </div>
+          <div class="flex flex-col gap-1 pt-3 text-[10px] text-[#929c95] sm:flex-row sm:justify-between"><span id="hypCount">0 traitement</span><span>DMT en hh:mm:ss · Occupation en minutes · Heure de travail en heures</span></div>
+        </section>
+      </section>
+
+
+
+      <!-- ========== PREVISION ========== -->
+      <section class="page-view hidden mx-auto w-full max-w-[1800px] flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8" id="previsionView">
+        <div class="mb-6">
+          <div class="eyebrow">SAISIE DES DONNÉES PRÉVISIONNELLES</div>
+          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Prévisions</h1>
+          <p class="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Deux espaces distincts pour les prévisions mensuelles et journalières. La prévision mensuelle est calculée automatiquement à partir des volumes Reçu par traitement, puis prolongée par moyenne mobile sur trois mois.</p>
+        </div>
+        <div class="mb-5 flex flex-wrap gap-2 rounded-2xl border border-line bg-white p-2 shadow-card" role="tablist" aria-label="Type de prévision">
+          <button class="button button-primary" id="forecastMonthlyTab" role="tab" aria-selected="true" aria-controls="forecastMonthlyPanel">Prévision mensuelle</button>
+          <button class="button button-secondary" id="forecastDailyTab" role="tab" aria-selected="false" aria-controls="forecastDailyPanel">Prévision journalière</button>
+          <button class="button button-secondary" id="forecastHistoryTab" role="tab" aria-selected="false" aria-controls="forecastHistoryPanel">Historique</button>
+        </div>
+        <section id="forecastMonthlyPanel" role="tabpanel" aria-labelledby="forecastMonthlyTab" class="rounded-2xl border border-line bg-white p-5 shadow-card sm:p-7 lg:p-8">
+          <div class="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div><div class="eyebrow">VUE MENSUELLE</div><h2 class="font-display text-[16px] font-bold">Prévision mensuelle</h2></div>
+            <div class="flex flex-wrap items-end gap-3">
+              <label class="flex flex-col gap-1 text-[11px] font-semibold text-[#526158]" for="forecastMonthlyAddCount">Nombre de lignes à ajouter<input id="forecastMonthlyAddCount" class="hyp-input forecast-add-count" type="number" min="1" max="100" step="1" value="4" aria-label="Nombre de lignes mensuelles à ajouter"></label>
+              <button class="button button-primary" id="forecastMonthlyAddBatch">+ Ajouter les lignes</button>
+              <button class="button button-secondary" id="forecastMonthlyExport">Exporter le mensuel ↗</button>
+            </div>
+          </div>
+          <div id="forecastMonthlyTableWrap" class="table-wrap max-h-[760px] min-h-[260px] w-full overflow-auto rounded-xl border border-[#edf0ed]"></div>
+          <div class="flex flex-col gap-1 pt-3 text-[10px] text-[#929c95] sm:flex-row sm:justify-between"><span id="forecastMonthlyCount">0 ligne</span><span>Vous gérez les lignes affichées : ajoutez ou supprimez les traitements et les mois selon vos besoins. Calcul : somme de Reçu par mois et traitement, puis moyenne des 3 mois précédents.</span></div>
+        </section>
+        <section id="forecastDailyPanel" role="tabpanel" aria-labelledby="forecastDailyTab" class="hidden rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><div class="eyebrow">VUE JOURNALIÈRE</div><h2 class="font-display text-[15px] font-bold">Prévision journalière</h2><p class="mt-1 text-[11px] text-muted">Une ligne par date de prévision, distincte du tableau mensuel.</p></div>
+            <div class="flex flex-wrap gap-2"><button class="button button-secondary" id="forecastDailyExport">Exporter le journalier ↗</button></div>
+          </div>
+          <div class="mb-5 rounded-xl border border-[#edf0ed] bg-[#fafcfb] p-4">
+            <div class="mb-3 flex items-center gap-2"><span class="text-brand" aria-hidden="true">▦</span><h3 class="text-[13px] font-bold">Générer les dates automatiquement</h3></div>
+            <div class="mb-3 flex flex-wrap items-center gap-3"><label class="text-[12px] font-semibold" for="forecastDailyYear">Année</label><input id="forecastDailyYear" class="hyp-input" type="number" min="2000" max="2100" style="width:104px" aria-label="Année des prévisions journalières"><span class="text-[11px] text-muted">Sélectionnez un ou plusieurs mois ; tous les jours seront ajoutés automatiquement.</span></div>
+            <div id="forecastDailyMonths" class="flex flex-wrap gap-2" aria-label="Mois à générer"></div>
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-2"><span class="text-[11px] text-muted" id="forecastDailySelectionSummary">Aucun mois sélectionné</span><button type="button" class="button button-secondary" id="forecastDailyClearMonths">Désélectionner les mois</button></div>
+          </div>
+          <div id="forecastDailyTableWrap" class="table-wrap max-h-[620px] min-h-[205px] w-full overflow-auto rounded-xl border border-[#edf0ed]"></div>
+          <div class="flex flex-col gap-1 pt-3 text-[10px] text-[#929c95] sm:flex-row sm:justify-between"><span id="forecastDailyCount">0 ligne</span><span>Les prévisions journalières sont indépendantes des prévisions mensuelles.</span></div>
+        </section>
+        <section id="forecastHistoryPanel" role="tabpanel" aria-labelledby="forecastHistoryTab" class="hidden rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div><div class="eyebrow">SUIVI DES MODIFICATIONS</div><h2 class="font-display text-[15px] font-bold">Historique du client</h2><p class="mt-1 text-[11px] text-muted">Historique des imports Reçu et des modifications des prévisions, classé par client et campagne.</p></div>
+            <button class="button button-secondary" id="forecastHistoryClear">Effacer l’historique</button>
+          </div>
+          <div class="mb-4 flex flex-wrap gap-3 rounded-xl border border-[#edf0ed] bg-[#fafcfb] p-3">
+            <label class="flex flex-col gap-1 text-[11px] font-semibold">Client<select id="forecastHistoryClient" class="hyp-input"><option value="">Tous les clients</option></select></label>
+            <label class="flex flex-col gap-1 text-[11px] font-semibold">Campagne<select id="forecastHistoryCampaign" class="hyp-input"><option value="">Toutes les campagnes</option></select></label>
+            <label class="flex flex-col gap-1 text-[11px] font-semibold">Type de prévision<select id="forecastHistoryType" class="hyp-input"><option value="">Reçu et toutes les prévisions</option><option value="Reçu">Imports Reçu</option><option value="Mensuelle">Prévision mensuelle</option><option value="Journalière">Prévision journalière</option></select></label>
+          </div>
+          <div id="forecastHistoryTableWrap" class="table-wrap max-h-[620px] min-h-[205px] w-full overflow-auto rounded-xl border border-[#edf0ed]"></div>
+          <div class="pt-3 text-[10px] text-[#929c95]" id="forecastHistoryCount">0 modification</div>
+        </section>
+      </section>
+
+      <!-- ========== BESOIN EN HEURE (PLANIFY) ========== -->
+      <section class="page-view hidden mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9" id="besoinView">
+        <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <div class="eyebrow">PLANIFY · CHARGE HORAIRE</div>
+            <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Besoin en heure</h1>
+            <p class="hidden mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Affichez les 5 jours ouvrés d’une semaine avec leur date, les heures de 00 h à 23 h et les totaux par jour et par heure. Chaque traitement issu de la colonne Statut de REÇU peut être affiché séparément ; le DMT et l’occupation viennent de Hypothèses.</p>
+          </div>
+          <div class="flex flex-wrap gap-2 self-start sm:self-auto">
+            <button class="button button-primary" id="besoinExport" disabled>Exporter les données ↗</button>
+          </div>
+        </div>
+
+        <div id="besoinAlert" class="hidden mb-5" role="status"></div>
+
+        <div class="hidden mb-5 grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4" id="besoinKpis">
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5"><div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span id="besoinKpiTotalLabel">Total de la semaine</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">Σ</span></div><strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="besoinKpiTotal">—</strong><small class="text-[10px] text-[#98a19b]" id="besoinKpiTotalDetail">Aucune donnée</small></article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5"><div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Heure de pic</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">▲</span></div><strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="besoinKpiPic">—</strong><small class="text-[10px] text-[#98a19b]" id="besoinKpiPicDetail">Aucune donnée</small></article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5"><div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Jour le plus chargé</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">◉</span></div><strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="besoinKpiJour">—</strong><small class="text-[10px] text-[#98a19b]" id="besoinKpiJourDetail">Aucune donnée</small></article>
+          <article class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-5"><div class="flex items-center justify-between gap-2 text-[10px] font-semibold text-muted sm:text-[11px]"><span>Traitements affichés</span><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-base text-brand">☷</span></div><strong class="mt-3 block font-display text-2xl font-extrabold tracking-tight sm:text-[27px]" id="besoinKpiTrait">0</strong><small class="text-[10px] text-[#98a19b]" id="besoinKpiTraitDetail">Aucun traitement</small></article>
+        </div>
+
+        <section class="panel mb-5 rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-4 flex items-start gap-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-soft font-display text-[11px] font-bold text-brand">01</span><div><h2 class="font-display text-[15px] font-bold">Filtres</h2><p class="mt-1 text-[11px] text-[#89938d]" id="besoinFilterHint">Filtrez par dates, choisissez la semaine et sélectionnez les traitements à afficher.</p></div></div>
+          <div class="grid gap-4 lg:grid-cols-[auto_1fr]">
+            <div class="flex flex-wrap items-end gap-3">
+              <label class="flex flex-col gap-1.5 text-[11px] font-semibold text-ink">Du<input type="date" id="besoinFrom" class="hyp-input" style="width:150px" disabled></label>
+              <label class="flex flex-col gap-1.5 text-[11px] font-semibold text-ink">Au<input type="date" id="besoinTo" class="hyp-input" style="width:150px" disabled></label>
+              <div class="flex flex-col gap-1.5 text-[11px] font-semibold text-ink"><span>Semaine</span>
+                <div class="flex items-center gap-1.5">
+                  <button type="button" class="button button-secondary !px-3" id="besoinPrev" aria-label="Semaine précédente" disabled>&lt;</button>
+                  <div id="besoinWeekHost"><button type="button" class="hyp-input" disabled style="min-width:250px;text-align:left">Aucune semaine</button></div>
+                  <button type="button" class="button button-secondary !px-3" id="besoinNext" aria-label="Semaine suivante" disabled>&gt;</button>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-end gap-2 lg:justify-end">
+              <button type="button" class="button button-secondary" id="besoinPresetLast" disabled>Dernière semaine</button>
+              <button type="button" class="button button-secondary" id="besoinPreset4" disabled>4 dernières semaines</button>
+              <button type="button" class="button button-secondary" id="besoinPresetAll" disabled>Toute la période</button>
+            </div>
+          </div>
+          <div class="mt-4 grid gap-4 border-t border-line pt-4 md:grid-cols-2">
+            <div><span class="mb-2 block text-[11px] font-semibold text-ink">Indicateur</span>
+              <div class="bh-seg" role="radiogroup" aria-label="Indicateur affiché" id="besoinModes">
+                <button type="button" role="radio" data-mode="besoin" aria-checked="true">Besoin (h)</button>
+                <button type="button" role="radio" data-mode="charge" aria-checked="false">Charge (h)</button>
+                <button type="button" role="radio" data-mode="volume" aria-checked="false">Volume reçu</button>
+              </div></div>
+            <div><span class="mb-2 block text-[11px] font-semibold text-ink">Affichage</span>
+              <div class="bh-seg" role="radiogroup" aria-label="Mode d’affichage" id="besoinViews">
+                <button type="button" role="radio" data-affichage="cumule" aria-checked="false">Tous traitements cumulés</button>
+                <button type="button" role="radio" data-affichage="detail" aria-checked="true">Un tableau par traitement</button>
+              </div></div>
+          </div>
+          <div class="mt-4 border-t border-line pt-4"><div class="mb-2 flex items-center justify-between gap-2"><span class="text-[11px] font-semibold text-ink">Traitements</span><span class="text-[10px] text-muted" id="besoinTraitCount">0 sélectionné</span></div>
+            <div class="flex flex-wrap gap-2" id="besoinTreatments" aria-label="Filtrer par traitement"><span class="text-[11px] text-muted">Les traitements apparaissent après l’import d’un fichier dans REÇU.</span></div></div>
+        </section>
+
+        <section class="panel mb-5 rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-5 flex items-start gap-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-soft font-display text-[11px] font-bold text-brand">02</span><div><h2 class="font-display text-[15px] font-bold" id="besoinGridTitle">Répartition horaire</h2><p class="mt-1 text-[11px] text-[#89938d]" id="besoinGridDescription">Importez un fichier dans REÇU pour afficher les heures.</p></div></div>
+          <div id="besoinGridWrap"></div>
+          <div class="flex flex-col gap-1 pt-3 text-[10px] text-[#929c95] sm:flex-row sm:justify-between"><span id="besoinFormula" class="hidden" aria-hidden="true"></span><span id="besoinIgnored"></span></div>
+        </section>
+
+        <div id="besoinRecapWrap" class="hidden" aria-hidden="true"></div>
+
+
+      </section>
+
+      <!-- ========== JOURS FÉRIÉS ========== -->
+      <section class="page-view hidden mx-auto w-full max-w-[1600px] flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-9" id="feriesView">
+        <div class="mb-6">
+          <div class="eyebrow">CALENDRIER</div>
+          <h1 class="font-display text-2xl font-extrabold tracking-tight sm:text-3xl">Jours fériés</h1>
+          <p class="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#7c8780]">Jours fériés à exclure ou traiter à part dans le dimensionnement. Madagascar et France peuvent être chargés par année ; chaque date reste modifiable.</p>
+        </div>
+        <section class="rounded-2xl border border-line bg-white p-4 shadow-card sm:p-6">
+          <div class="mb-5 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div class="flex items-start gap-3"><span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-brand-soft font-display text-[11px] font-bold text-brand">01</span><div><h2 class="font-display text-[15px] font-bold">Dates des jours fériés</h2><p class="mt-1 text-[11px] text-[#89938d]" id="ferDescription">Aucun jour férié enregistré.</p></div></div>
+            <div class="flex flex-wrap items-center gap-2">
+              <input class="hyp-input !w-24 !min-w-0" type="number" id="ferYear" min="2000" max="2100" step="1" aria-label="Année">
+              <button class="button button-secondary" id="ferAddMada">+ Madagascar</button>
+              <button class="button button-secondary" id="ferAddFr">+ France</button>
+              <button class="button button-primary" id="ferAddRow">+ Ajouter une date</button>
+              <div id="ferFilter"></div>
+            </div>
+          </div>
+          <div class="mb-4 flex flex-wrap items-center gap-2" id="ferLegend"></div>
+          <div class="table-wrap max-h-[560px] min-h-[205px] w-full overflow-auto rounded-xl border border-[#edf0ed]" id="ferTableWrap"></div>
+          <div class="flex flex-col gap-1 pt-3 text-[10px] text-[#929c95] sm:flex-row sm:justify-between"><span id="ferCount">0 jour férié</span><span>Dates mobiles (Pâques, Ascension, Pentecôte) calculées pour l'année choisie · à vérifier chaque année</span></div>
+        </section>
+      </section>
+
+      <!-- ========== MODALE (design premium) ========== -->
+      <div class="pm-backdrop hidden" id="bulkEditModal" role="dialog" aria-modal="true" aria-labelledby="bulkEditTitle" aria-describedby="bulkEditDesc">
+        <section class="pm-card pm-card-lg">
+          <header class="pm-head">
+            <span class="pm-badge" aria-hidden="true">✎</span>
+            <div class="pm-head-text"><span class="pm-eyebrow">MODIFICATION CONTRÔLÉE</span><h2 class="pm-title" id="bulkEditTitle">Modifier une colonne</h2><p class="pm-sub" id="bulkEditDesc">Les changements sont appliqués aux données en mémoire, puis inclus dans l’export CSV. Une confirmation vous sera demandée avant l’application.</p></div>
+            <button class="pm-close" id="closeBulkEdit" aria-label="Fermer">×</button>
+          </header>
+          <div class="pm-body">
+            <div class="pm-field"><label for="bulkColumn">Colonne à modifier</label><select id="bulkColumn"></select></div>
+            <div class="pm-grid2">
+              <div class="pm-field"><label for="bulkMode">Opération</label><select id="bulkMode"><option value="all">Remplacer toutes les valeurs</option><option value="match">Remplacer une valeur précise</option></select></div>
+              <div class="pm-field"><label for="bulkScope">Appliquer à</label><select id="bulkScope"><option value="all">Toutes les lignes</option><option value="filtered">Lignes de la recherche</option></select></div>
+            </div>
+            <div id="matchValueGroup" class="pm-field hidden"><label for="bulkMatchValue">Valeur à rechercher</label><input id="bulkMatchValue" type="text" placeholder="Valeur existante exacte"></div>
+            <div class="pm-field"><label for="bulkNewValue">Nouvelle valeur</label><input id="bulkNewValue" type="text" placeholder="Saisir la nouvelle valeur"></div>
+            <div class="pm-summary"><span class="pm-pulse" aria-hidden="true"></span><div><strong id="bulkMatchCount">0 ligne concernée</strong><small id="bulkPreviewText">Choisissez une colonne et une opération.</small></div></div>
+          </div>
+          <footer class="pm-foot"><button class="button button-secondary" id="cancelBulkEdit">Annuler</button><button class="button button-primary" id="applyBulkEdit" disabled>Appliquer les modifications</button></footer>
+        </section>
+      </div>
+
+
+  <div id="clientCampaignDialog" class="fixed inset-0 z-[120] hidden items-center justify-center bg-[#15251d]/55 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="clientCampaignDialogTitle">
+    <section class="w-full max-w-xl overflow-hidden rounded-2xl border border-[#e3e9e3] bg-white shadow-2xl">
+      <div class="flex items-start justify-between gap-4 border-b border-[#edf0ed] p-5 sm:p-6">
+        <div><span class="text-[10px] font-bold tracking-[.16em] text-[#688b70]">PROFIL DES DONNÉES</span><h2 id="clientCampaignDialogTitle" class="mt-1 font-display text-xl font-extrabold text-[#24362b]">Associer un client et une campagne</h2><p id="clientCampaignDialogDesc" class="mt-2 text-sm leading-relaxed text-[#7c8780]">Ces informations organiseront le fichier dans l’arborescence.</p></div>
+        <button type="button" id="clientCampaignDialogClose" class="rounded-lg px-3 py-1 text-2xl text-[#7c8780] hover:bg-[#f3f6f3]" aria-label="Fermer">×</button>
+      </div>
+      <div class="space-y-4 p-5 sm:p-6">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="flex flex-col gap-1.5 text-[11px] font-semibold text-[#29392f]">Client *<input id="activeClient" class="hyp-input" list="knownClients" placeholder="Ex. CISION, TE, MONDIAL RELAY" autocomplete="off" required><datalist id="knownClients"><option value="CISION"></option><option value="TE"></option><option value="MONDIAL RELAY"></option></datalist></label>
+          <label class="flex flex-col gap-1.5 text-[11px] font-semibold text-[#29392f]">Campagne *<input id="activeCampaign" class="hyp-input" list="knownCampaigns" placeholder="Saisir le nom de la campagne" autocomplete="off" required><datalist id="knownCampaigns"></datalist></label>
+        </div>
+        <p id="activeProfileStatus" class="text-[10px] text-[#7c8780]">Format d’organisation : CLIENT_CAMPAGNE.</p>
+        <div class="rounded-xl border border-[#e5ebe5] bg-[#fafcfb] p-3 sm:p-4">
+          <div class="mb-3"><h3 class="text-[12px] font-bold text-[#29392f]">Réutiliser un ancien fichier reçu</h3><p class="mt-1 text-[10px] leading-relaxed text-[#7c8780]">Optionnel : restaurez une version importée auparavant pour ce client et cette campagne.</p></div>
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-end"><label class="flex min-w-0 flex-1 flex-col gap-1.5 text-[11px] font-semibold text-[#29392f]">Versions précédentes<select id="reuseReceivedFile" class="hyp-input" disabled><option value="">Aucune ancienne version disponible</option></select></label><button type="button" class="button button-secondary shrink-0" id="reuseReceivedFileButton" disabled>Réutiliser ce fichier</button></div>
+          <p class="mt-2 text-[10px] text-[#7c8780]" id="reuseReceivedFileStatus">Les anciennes versions seront proposées ici.</p>
+        </div>
+      </div>
+      <div class="flex flex-col-reverse justify-end gap-2 border-t border-[#edf0ed] bg-[#fafcfb] p-4 sm:flex-row sm:p-5"><button type="button" id="clientCampaignDialogCancel" class="button button-secondary">Annuler</button><button type="button" id="clientCampaignDialogConfirm" class="button button-primary">Confirmer et continuer ↗</button></div>
+    </section>
+  </div>
+
+
+  <div id="azureDemoModal" class="azure-modal hidden" role="dialog" aria-modal="true" aria-labelledby="azureDemoTitle">
+    <div class="azure-modal-backdrop" data-azure-close></div>
+    <section class="azure-modal-card">
+      <header class="azure-modal-header"><div class="azure-modal-brand"><div class="azure-modal-logo"><svg viewBox="0 0 24 24" fill="none"><path d="M13.2 3.5h4.2L23 14.1h-4.3l-2.1-4-3.4 6.2H5.8l7.4-12.8Z" fill="currentColor"/><path d="M2 17.2h12.3l-2.2 3.3H4.1L2 17.2Z" fill="currentColor" opacity=".55"/></svg></div><div><span class="azure-modal-kicker">SOURCE DE DONNÉES</span><h2 id="azureDemoTitle">Importer depuis Azure SQL</h2><p>Testez la connexion, sélectionnez une table, vérifiez l’aperçu puis importez dans REÇU.</p></div></div><button type="button" class="azure-close" id="closeAzureDemo" aria-label="Fermer">×</button></header>
+      <div class="azure-modal-body">
+        <div class="azure-demo-notice"><span class="azure-notice-icon">i</span><p><strong>Connexion sécurisée.</strong> Les paramètres Azure SQL sont lus côté serveur. Aucun mot de passe n’est saisi ni conservé dans le navigateur.</p></div>
+        <div class="azure-form-grid">
+          <label class="azure-field"><span>Type de base</span><select id="azureDbType"><option value="sql">Azure SQL Database</option><option value="postgres">Azure Database for PostgreSQL</option><option value="mysql">Azure Database for MySQL</option><option value="cosmos">Azure Cosmos DB</option></select></label>
+          <label class="azure-field"><span>Environnement</span><select id="azureEnvironment"><option value="demo">Démonstration</option><option value="later">Connexion réelle (à configurer)</option></select></label>
+          <label class="azure-field azure-field-wide"><span>Serveur / point de terminaison</span><input id="azureServer" value="mon-serveur.database.windows.net" autocomplete="off" placeholder="serveur.database.windows.net"></label>
+          <label class="azure-field"><span>Base de données</span><input id="azureDatabase" value="MaBaseDeDonnees" autocomplete="off"></label>
+          <label class="azure-field"><span>Table ou vue</span><select id="azureTable"><option value="DATA_RENTA_COUT">DATA_RENTA_COUT</option><option value="BUDGET_CA_REALISEE">BUDGET | CA REALISÉE</option><option value="RECU">REÇU</option><option value="custom">Autre table / vue…</option></select></label>
+          <label class="azure-field azure-field-wide hidden" id="azureCustomTableWrap"><span>Nom de la table / vue</span><input id="azureCustomTable" placeholder="dbo.MaTable"></label>
+        </div>
+        <div class="azure-security-note"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 19 6v5c0 4.6-2.8 7.8-7 10-4.2-2.2-7-5.4-7-10V6l7-3Z" stroke="currentColor" stroke-width="1.6"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Identifiants conservés côté serveur</strong><small>Le serveur utilise les variables AZURE_SQL_SERVER, AZURE_SQL_DATABASE, AZURE_SQL_USER et AZURE_SQL_PASSWORD. Ne partagez jamais le fichier .env.</small></span></div>
+        <div id="azureDemoStatus" class="azure-demo-status" role="status" aria-live="polite">En attente — vérifiez la configuration du serveur puis chargez les tables.</div>
+        <section id="azureDemoPreview" class="azure-demo-preview hidden"><div class="azure-preview-head"><div><span class="azure-modal-kicker">APERÇU DES DONNÉES RÉELLES</span><h3 id="azurePreviewTitle">Table sélectionnée</h3></div><span class="azure-preview-count">0 ligne</span></div><div class="azure-preview-table-wrap"><table class="azure-preview-table"><thead></thead><tbody></tbody></table></div><p class="azure-preview-footnote">Les données seront ajoutées à REÇU uniquement après validation via le bouton d’import.</p></section>
+      </div>
+      <footer class="azure-modal-footer"><button type="button" class="button button-secondary" data-azure-close>Fermer</button><div class="azure-modal-actions"><button type="button" class="button button-secondary" id="azureTestConnection">Tester la connexion</button><button type="button" class="button button-secondary" id="azureRefreshTables">Charger les tables</button><button type="button" class="button button-primary" id="azureLoadPreview">Prévisualiser</button><button type="button" class="button button-primary" id="azureImportData" disabled>Importer dans REÇU</button></div></footer>
+    </section>
+  </div>
+
+      <footer class="mx-4 flex items-center justify-between border-t border-line py-5 text-[10px] text-[#9aa39d] sm:mx-6 lg:mx-10"><span>DIMENSIONNEMENT <span class="px-1 text-gold">·</span> Prototype de travail</span><span>Version 1.0</span></footer>
+    </main>
+  </div>
+</body>
+</html>

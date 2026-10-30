@@ -759,7 +759,7 @@ body.pm-open{overflow:hidden}
 
 
 /* Import unified: local files and Azure SQL in the same frame */
-.recu-import-options{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;margin-top:16px}
+.recu-import-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:14px;margin-top:16px}
 .recu-import-option{min-width:0;border:1px solid #e8ede9;border-radius:14px;padding:14px;background:#fff}
 .recu-option-title{display:flex;align-items:center;gap:10px;margin-bottom:12px;min-height:40px}
 .recu-option-title>div{min-width:0;display:flex;flex-direction:column;gap:3px}
@@ -809,3 +809,176 @@ body.pm-open{overflow:hidden}
 #forecastMonthlyAddCount:hover{border-color:#6e9d7e;background:#f4faf5;}
 #forecastMonthlyAddCount:focus{outline:0;border-color:#27784b;background:#fff;box-shadow:0 0 0 3px rgba(39,120,75,.17);}
 @media(max-width:760px){#forecastMonthlyPanel .hyp-table th{padding:9px 8px}#forecastMonthlyPanel .hyp-table td{padding:8px}#forecastMonthlyAddCount{width:100%;}}
+
+/* Actions de suppression : contraste rouge, icône explicite et zone cliquable nette. */
+.button-delete {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+  border: 1px solid #dc5656 !important;
+  background: #fff !important;
+  color: #b42323 !important;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.button-delete:hover, .button-delete:focus-visible {
+  border-color: #b42323 !important;
+  background: #fff1f1 !important;
+  color: #8f1717 !important;
+}
+.button-delete span[aria-hidden="true"] { font-size: 1rem; line-height: 1; }
+
+/* Prévision journalière : date compacte et centrage homogène des données. */
+.forecast-daily-table th,
+.forecast-daily-table td { text-align: center !important; vertical-align: middle; }
+.forecast-daily-table td > *,
+.forecast-daily-table td .hyp-input,
+.forecast-daily-table td select,
+.forecast-daily-table td button { margin-left: auto; margin-right: auto; }
+.forecast-daily-table .hyp-input,
+.forecast-daily-table select { text-align: center; }
+.forecast-daily-table .forecast-date-label { display: inline-block; min-width: 94px; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.forecast-daily-table .forecast-centered-cell { text-align: center !important; }
+.forecast-table .button-delete { margin-inline: auto; }
+
+/* Accès rapides du tableau de bord. */
+.dashboard-shortcut {
+  display: flex; width: 100%; min-width: 0; align-items: center; gap: .8rem;
+  padding: 1rem; border: 1px solid #e3e9e3; border-radius: 14px;
+  background: #fff; color: #20352c; text-align: left; transition: border-color .18s, background .18s, transform .18s;
+}
+.dashboard-shortcut:hover, .dashboard-shortcut:focus-visible { border-color: #9bb6a0; background: #f8fbf8; transform: translateY(-1px); outline: none; }
+.dashboard-shortcut-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 11px; background: #edf5ee; color: #315d45; font-size: 1.15rem; }
+.dashboard-shortcut > span:nth-child(2) { display: grid; min-width: 0; gap: .25rem; }
+.dashboard-shortcut strong { font-size: 12px; font-weight: 800; }
+.dashboard-shortcut small { color: #77847b; font-size: 10px; line-height: 1.5; }
+.dashboard-shortcut-arrow { margin-left: auto; color: #52735d; font-size: 1rem; }
+.dashboard-param { display: flex; min-width: 0; flex-direction: column; gap: .35rem; padding: .85rem; border: 1px solid #e8ece8; border-radius: 12px; background: #fbfcfb; }
+.dashboard-param > span { color: #315d45; font-size: 10px; font-weight: 800; }
+.dashboard-param strong { color: #263b30; font-size: 11px; line-height: 1.4; }
+.dashboard-param small { color: #89938c; font-size: 10px; }
+.tree-delete-button { border-color: #dc5656 !important; color: #b42323 !important; }
+.tree-delete-button:hover { border-color: #b42323 !important; background: #fff1f1 !important; color: #8f1717 !important; }
+
+/* Connecteur PostgreSQL */
+.recu-postgres-option{border-color:#d7e6df;background:linear-gradient(145deg,#fbfdfc,#f4f9f6)}.recu-postgres-icon{display:grid;place-items:center;background:#eef5fa}.recu-postgres-icon img{display:block;width:34px;height:34px;object-fit:contain}.postgres-modal-logo{display:grid;place-items:center;background:#eef5fa;flex:0 0 auto}.postgres-modal-logo img{display:block;width:44px;height:44px;object-fit:contain}
+
+.azure-import-profile-grid{margin-top:14px;padding:14px;border:1px solid rgba(183,146,76,.28);border-radius:16px;background:rgba(183,146,76,.055)}
+.azure-import-profile-grid .azure-field input{width:100%;min-width:0}
+
+/* Sélecteur de semaines premium : compact, recherchable et multi-sélection sans Ctrl+clic. */
+.week-picker-trigger{display:flex;width:100%;min-height:62px;align-items:center;gap:12px;padding:10px 14px;border:1px solid #dfe7e1;border-radius:15px;background:linear-gradient(135deg,#fff 0%,#f9fcfa 100%);text-align:left;transition:border-color .18s,box-shadow .18s,transform .18s}
+.week-picker-trigger:hover,.week-picker-trigger[aria-expanded="true"]{border-color:#8eae98;box-shadow:0 5px 18px rgba(34,75,48,.08)}
+.week-picker-icon{display:grid;width:38px;height:38px;flex:0 0 38px;place-items:center;border-radius:12px;background:#edf5ef;color:#37684a;font-size:19px}
+.week-picker-copy{display:grid;min-width:0;flex:1;gap:3px}.week-picker-copy strong{overflow:hidden;color:#263a2e;font-size:12px;font-weight:800;text-overflow:ellipsis;white-space:nowrap}.week-picker-copy small{overflow:hidden;color:#849087;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.week-picker-chevron{color:#698272;font-size:20px;transition:transform .18s}.week-picker-trigger[aria-expanded="true"] .week-picker-chevron{transform:rotate(180deg)}
+.week-picker-panel{position:absolute;z-index:50;top:calc(100% + 8px);left:0;width:min(100%,470px);overflow:hidden;border:1px solid #e1e9e3;border-radius:17px;background:#fff;box-shadow:0 18px 48px rgba(25,48,33,.16)}
+.week-picker-panel-head,.week-picker-panel-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px}.week-picker-panel-head{border-bottom:1px solid #eef2ee}.week-picker-panel-head>div{display:grid;gap:3px}.week-picker-panel-head strong{color:#2a3d31;font-size:12px}.week-picker-panel-head small{color:#89938c;font-size:10px}.week-picker-link{border:0;background:transparent;color:#39744c;font-size:10px;font-weight:800;white-space:nowrap}.week-picker-link:hover{text-decoration:underline}.week-picker-search{display:flex;align-items:center;gap:8px;margin:11px 12px;padding:0 11px;border:1px solid #e7ece8;border-radius:10px;background:#fafcfb;color:#7c8b80}.week-picker-search input{width:100%;height:36px;border:0;outline:0;background:transparent;color:#263a2e;font-size:11px}.week-picker-options{max-height:220px;overflow:auto;padding:2px 10px 9px}.week-picker-option{display:flex;min-height:38px;align-items:center;gap:10px;padding:7px 9px;border-radius:9px;cursor:pointer}.week-picker-option:hover{background:#f5f9f6}.week-picker-option input{width:15px;height:15px;accent-color:#39744c}.week-picker-option-name{flex:1;color:#435248;font-size:11px}.week-picker-check{display:grid;width:18px;height:18px;place-items:center;border-radius:6px;background:#edf5ef;color:#39744c;font-size:11px;opacity:0}.week-picker-option:has(input:checked){background:#f2f8f3}.week-picker-option:has(input:checked) .week-picker-option-name{color:#28583a;font-weight:800}.week-picker-option:has(input:checked) .week-picker-check{opacity:1}.week-picker-panel-foot{border-top:1px solid #eef2ee;background:#fbfcfb;color:#89938c;font-size:10px}.week-picker-empty{padding:16px;color:#929c95;text-align:center;font-size:11px}.week-picker-hint{padding-bottom:10px;color:#829087;font-size:10px;white-space:nowrap}
+@media(max-width:640px){.week-picker-panel{width:100%}.week-picker-hint{white-space:normal}}
+
+
+/* Référence horaire : grille compacte, responsive, sans défilement horizontal */
+.ref-hour-results{overflow:hidden;background:#fff}
+.ref-hour-groups{display:grid;grid-template-columns:1fr;gap:12px;padding:12px}
+.ref-hour-card{min-width:0;overflow:hidden;border:1px solid #e8eee9;border-radius:14px;background:#fff}
+.ref-hour-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:#f7faf7;border-bottom:1px solid #e8eee9}
+.ref-hour-card-head strong{min-width:0;color:#20372a;font-size:12px;font-weight:800;overflow-wrap:anywhere}
+.ref-hour-card-head span{color:#7a897f;font-size:9px;text-align:right}
+.ref-hour-day{display:grid;grid-template-columns:76px minmax(0,1fr) 62px;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid #f0f3f0}
+.ref-hour-day:last-child{border-bottom:0}
+.ref-hour-day-label{font-size:10px;font-weight:750;color:#52665a}
+.ref-hour-cells{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px;min-width:0}
+.ref-hour-cell{display:flex;min-width:0;min-height:38px;flex-direction:column;align-items:center;justify-content:center;gap:2px;border:1px solid #edf1ed;border-radius:6px;background:#fbfcfb;overflow:hidden}
+.ref-hour-cell-hour{font-size:8px;line-height:1;color:#849188}
+.ref-hour-cell-value{font-size:8px;line-height:1.1;font-weight:750;color:#355b42;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ref-hour-day-total{font-size:9px;font-weight:800;color:#39744c;text-align:right;white-space:nowrap}
+@media(min-width:900px){.ref-hour-cells{grid-template-columns:repeat(24,minmax(0,1fr));gap:2px}.ref-hour-cell{min-height:42px;border-radius:5px}.ref-hour-cell-hour{font-size:8px}.ref-hour-cell-value{font-size:7px}}
+@media(max-width:520px){.ref-hour-day{grid-template-columns:58px minmax(0,1fr) 48px;gap:5px;padding:8px 6px}.ref-hour-day-label{font-size:9px}.ref-hour-cell{min-height:34px}.ref-hour-cell-value{font-size:7px}.ref-hour-card-head{align-items:flex-start;flex-direction:column;gap:3px}.ref-hour-card-head span{text-align:left}}
+
+/* Matrice horaire : jours en lignes, heures en colonnes, sans scroll horizontal. */
+.ref-hour-matrix{width:100%;border-collapse:separate;border-spacing:2px;table-layout:fixed;font-variant-numeric:tabular-nums}
+.ref-hour-matrix th,.ref-hour-matrix td{padding:7px 1px;text-align:center;font-size:9px;line-height:1.15;overflow:hidden;white-space:nowrap;border-radius:4px}
+.ref-hour-matrix thead th{background:#f2f7f3;color:#315d45;font-weight:800}
+.ref-hour-matrix thead th:first-child,.ref-hour-matrix tbody th{width:62px;background:#f8faf8;color:#52665a;font-weight:800;text-align:left;padding-left:8px}
+.ref-hour-matrix tbody td{font-weight:700;font-size:8px;font-variant-numeric:tabular-nums}
+.ref-hour-matrix td.weight-zero{background:#f7f8f7;color:#a0aaa3;font-weight:500}
+.ref-hour-matrix td.weight-level-1{background:#edf5ee;color:#55745d}
+.ref-hour-matrix td.weight-level-2{background:#d7ead9;color:#356642}
+.ref-hour-matrix td.weight-level-3{background:#a9d3ae;color:#20552d}
+.ref-hour-matrix td.weight-level-4{background:#579b65;color:#fff;font-weight:850}
+.ref-hour-matrix tbody tr:last-child th,.ref-hour-matrix tbody tr:last-child td{border-bottom:0}
+@media(max-width:700px){.ref-hour-matrix{border-spacing:1px}.ref-hour-matrix th,.ref-hour-matrix td{padding:6px 0;font-size:7px}.ref-hour-matrix tbody td{font-size:6px}.ref-hour-matrix thead th:first-child,.ref-hour-matrix tbody th{width:48px;padding-left:4px}}
+@media(max-width:420px){.ref-hour-matrix th,.ref-hour-matrix td{font-size:6px}.ref-hour-matrix tbody td{font-size:5.5px}.ref-hour-matrix thead th:first-child,.ref-hour-matrix tbody th{width:42px}}
+
+/* Lisibilité renforcée de la matrice horaire */
+.ref-hour-card-head strong{font-size:14px}
+.ref-hour-card-head span{font-size:10px}
+.ref-hour-matrix th,.ref-hour-matrix td{font-size:10px;padding:8px 1px;line-height:1.2}
+.ref-hour-matrix thead th:first-child,.ref-hour-matrix tbody th{font-size:10px}
+.ref-hour-matrix tbody td{font-size:9px}
+@media(max-width:700px){
+  .ref-hour-matrix th,.ref-hour-matrix td{font-size:8px;padding:7px 0}
+  .ref-hour-matrix tbody td{font-size:7px}
+  .ref-hour-matrix thead th:first-child,.ref-hour-matrix tbody th{font-size:9px}
+}
+@media(max-width:420px){
+  .ref-hour-matrix th,.ref-hour-matrix td{font-size:7px}
+  .ref-hour-matrix tbody td{font-size:6.5px}
+  .ref-hour-matrix thead th:first-child,.ref-hour-matrix tbody th{font-size:8px}
+}
+
+/* V10 — grille hebdomadaire : en-têtes hiérarchisés et traitement fusionné sur 7 jours */
+#besoinGridWrap .bh-week-table{min-width:1320px;table-layout:auto}
+#besoinGridWrap .bh-week-table thead th{font-size:11px;font-weight:850;letter-spacing:.025em;white-space:nowrap;padding:10px 8px}
+#besoinGridWrap .bh-week-table thead .bh-group-head{background:#182b49!important;color:#fff!important;border-bottom:2px solid #d5a64a!important}
+#besoinGridWrap .bh-week-table thead .bh-hours-group{background:#28466d!important;color:#fff!important;text-align:center!important;letter-spacing:.12em;font-size:10px}
+#besoinGridWrap .bh-week-table thead .bh-hour-col{background:#e7eef7!important;color:#203a60!important;font-size:10px;font-weight:900;min-width:48px;padding:9px 5px;border-bottom:2px solid #b7c8dc!important}
+#besoinGridWrap .bh-week-table thead .bh-date{min-width:104px}
+#besoinGridWrap .bh-week-table thead .bh-daycol{min-width:112px}
+#besoinGridWrap .bh-week-table .bh-treatment-col{width:160px;min-width:160px;max-width:190px}
+#besoinGridWrap .bh-week-table tbody .bh-treatment-merged{background:#203a60!important;color:#fff!important;font-size:12px;font-weight:850;line-height:1.45;white-space:normal;overflow-wrap:anywhere;padding:12px 10px;border-right:3px solid #d5a64a!important;vertical-align:middle!important;text-align:center!important}
+#besoinGridWrap .bh-week-table tbody .bh-date{background:#f3f6fa!important;color:#263b57!important;font-weight:800;white-space:nowrap}
+#besoinGridWrap .bh-week-table tbody .bh-daycol{background:#f8fafc!important;color:#263b57!important;font-weight:800}
+#besoinGridWrap .bh-week-table tbody tr:nth-child(even) .bh-date,
+#besoinGridWrap .bh-week-table tbody tr:nth-child(even) .bh-daycol{background:#edf2f8!important}
+#besoinGridWrap .bh-week-table tbody tr{border-bottom:1px solid #dce5ef!important}
+#besoinGridWrap .bh-week-table tbody td.bh-cell{font-size:10px;font-weight:700;padding:9px 5px;min-width:48px;border-bottom:1px solid #e3eaf2!important}
+#besoinGridWrap .bh-week-table tbody td.bh-total{background:#fff0df!important;color:#854d0e!important;font-weight:900;border-left:2px solid #e1b46c!important;min-width:82px}
+#besoinGridWrap .bh-week-table tbody tr:hover .bh-date,
+#besoinGridWrap .bh-week-table tbody tr:hover .bh-daycol{filter:brightness(.97)}
+#besoinRecapWrap .bh-recap thead th{background:#203a60!important;color:#fff!important;font-size:11px;font-weight:850;white-space:nowrap;padding:11px 10px}
+#besoinRecapWrap .bh-recap tbody td:first-child{background:#eef3f9;color:#203a60;font-weight:850}
+@media(max-width:760px){
+ #besoinGridWrap .bh-week-table{min-width:1240px}
+ #besoinGridWrap .bh-week-table .bh-treatment-col{width:130px;min-width:130px;max-width:130px}
+ #besoinGridWrap .bh-week-table thead th{font-size:10px;padding:8px 5px}
+ #besoinGridWrap .bh-week-table tbody .bh-treatment-merged{font-size:11px;padding:8px 6px}
+}
+
+
+/* Onglets des calculs intermédiaires */
+.calculation-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 22px;padding:6px;border:1px solid #e5ebe6;border-radius:15px;background:#f6f8f6;box-shadow:0 2px 8px rgba(28,54,36,.035)}
+.calculation-tab{position:relative;display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:10px 18px;border:1px solid transparent;border-radius:10px;background:transparent;color:#647268;font-size:12px;font-weight:800;letter-spacing:.01em;transition:background .18s ease,color .18s ease,border-color .18s ease,box-shadow .18s ease}
+.calculation-tab:hover{background:#fff;color:#244d32}
+.calculation-tab.active{border-color:#dce8de;background:#fff;color:#245b36;box-shadow:0 2px 7px rgba(32,69,43,.08)}
+.calculation-tab.active:before{content:"";width:6px;height:6px;margin-right:9px;border-radius:50%;background:#4b9560}
+.calculation-panel{min-width:0;animation:calculationPanelIn .18s ease}
+@keyframes calculationPanelIn{from{opacity:.65;transform:translateY(3px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:520px){.calculation-tabs{display:grid;grid-template-columns:1fr;margin-bottom:16px}.calculation-tab{width:100%;justify-content:flex-start}}
+
+/* V13 — une matrice unique, traitements fusionnés verticalement et séparés visuellement */
+#refHeureTableWrap{overflow-x:auto;}
+#refHeureTableWrap .ref-hour-matrix-unified{width:100%;min-width:980px;border-collapse:separate;border-spacing:2px;table-layout:fixed}
+#refHeureTableWrap .ref-hour-matrix-unified thead th{position:sticky;top:0;z-index:2;background:#203a60!important;color:#fff!important;padding:10px 2px;font-size:10px;font-weight:850;text-align:center}
+#refHeureTableWrap .ref-hour-matrix-unified thead th:first-child{width:50px;min-width:50px}
+#refHeureTableWrap .ref-hour-matrix-unified thead th:nth-child(2){width:74px;min-width:74px}
+#refHeureTableWrap .ref-hour-matrix-unified tbody tr.group-start th,
+#refHeureTableWrap .ref-hour-matrix-unified tbody tr.group-start td{border-top:3px solid #d5a64a}
+#refHeureTableWrap .ref-hour-matrix-unified tbody tr.group-base th:not(.ref-hour-treatment-merged){background:#f3f7f4;color:#344c3a}
+#refHeureTableWrap .ref-hour-matrix-unified tbody tr.group-alt th:not(.ref-hour-treatment-merged){background:#edf2f8;color:#263b57}
+#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged{width:50px;min-width:50px;max-width:50px;padding:8px 4px;background:#203a60!important;color:#fff!important;border-right:3px solid #d5a64a;border-radius:6px;text-align:center;vertical-align:middle;white-space:normal}
+#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged span{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg);max-height:210px;overflow-wrap:anywhere;white-space:normal;font-size:11px;line-height:1.2;font-weight:850;letter-spacing:.04em}
+#refHeureTableWrap .ref-hour-matrix-unified tbody tr.group-alt .ref-hour-treatment-merged{background:#31547d!important;border-right-color:#e2bd73}
+#refHeureTableWrap .ref-hour-matrix-unified tbody th:not(.ref-hour-treatment-merged){text-align:left;padding-left:8px;font-size:10px}
+#refHeureTableWrap .ref-hour-matrix-unified tbody td{font-size:9px;padding:8px 1px}
+@media(max-width:700px){#refHeureTableWrap .ref-hour-matrix-unified{min-width:900px}#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged{width:44px;min-width:44px;max-width:44px}#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged span{font-size:10px}}

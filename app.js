@@ -136,7 +136,7 @@ class FichierRecu {
 class SchemaRecu {
   static get COLONNES() {
     return [
-      "Date", "Heure", "Reçu", "Statut", "Source de données",
+      "Date", "Heure", "Reçu", "Statut", "Traitement", "Source de données",
       "Jour semaine", "Semaine", "Mois", "Année", "Semaine - Année",
       "Services", "Activités"
     ];
@@ -438,7 +438,7 @@ class VueFichiersRecus {
       const clientButton = document.createElement("button"); clientButton.type="button"; clientButton.className="tree-node tree-client-node"; clientButton.dataset.treeAction="client"; clientButton.dataset.client=client; clientButton.setAttribute("aria-expanded",String(clientOpen));
       clientButton.innerHTML = `<span class="tree-chevron">${clientOpen?"⌄":"›"}</span><span class="tree-folder-icon">▣</span><span class="tree-node-name"></span><span class="tree-node-meta">${campagnes.length} campagne${campagnes.length!==1?"s":""}</span>`; clientButton.querySelector(".tree-node-name").textContent=client;
       const clientLine=document.createElement("div"); clientLine.className="tree-node-line"; clientLine.append(clientButton);
-      const deleteClient=document.createElement("button"); deleteClient.type="button"; deleteClient.className="tree-delete-button"; deleteClient.dataset.treeAction="remove-client"; deleteClient.dataset.client=client; deleteClient.title=`Supprimer l’arborescence ${client}`; deleteClient.setAttribute("aria-label",deleteClient.title); deleteClient.textContent="×"; clientLine.append(deleteClient); clientWrap.append(clientLine);
+      const deleteClient=document.createElement("button"); deleteClient.type="button"; deleteClient.className="tree-delete-button"; deleteClient.dataset.treeAction="remove-client"; deleteClient.dataset.client=client; deleteClient.title=`Supprimer l’arborescence ${client}`; deleteClient.setAttribute("aria-label",deleteClient.title); deleteClient.textContent="⌫"; clientLine.append(deleteClient); clientWrap.append(clientLine);
       if (clientOpen) {
         const campaignList=document.createElement("div"); campaignList.className="tree-children";
         campagnes.forEach(profil => {
@@ -448,7 +448,7 @@ class VueFichiersRecus {
           campButton.innerHTML=`<span class="tree-chevron">${campOpen?"⌄":"›"}</span><span class="tree-folder-icon">▱</span><span class="tree-node-name"></span><span class="tree-node-meta">${profil.fichiers.length} fichier${profil.fichiers.length!==1?"s":""}</span>`; campButton.querySelector(".tree-node-name").textContent=profil.campagne;
           if (normaliserProfilTexte(actif.client)===clientKey && normaliserProfilTexte(actif.campagne)===normaliserProfilTexte(profil.campagne)) campButton.classList.add("is-active");
           const campaignLine=document.createElement("div"); campaignLine.className="tree-node-line"; campaignLine.append(campButton);
-          const deleteCampaign=document.createElement("button"); deleteCampaign.type="button"; deleteCampaign.className="tree-delete-button"; deleteCampaign.dataset.treeAction="remove-campaign"; deleteCampaign.dataset.client=client; deleteCampaign.dataset.campaign=profil.campagne; deleteCampaign.title=`Supprimer ${client}_${profil.campagne}`; deleteCampaign.setAttribute("aria-label",deleteCampaign.title); deleteCampaign.textContent="×"; campaignLine.append(deleteCampaign); campWrap.append(campaignLine);
+          const deleteCampaign=document.createElement("button"); deleteCampaign.type="button"; deleteCampaign.className="tree-delete-button"; deleteCampaign.dataset.treeAction="remove-campaign"; deleteCampaign.dataset.client=client; deleteCampaign.dataset.campaign=profil.campagne; deleteCampaign.title=`Supprimer ${client}_${profil.campagne}`; deleteCampaign.setAttribute("aria-label",deleteCampaign.title); deleteCampaign.textContent="⌫"; campaignLine.append(deleteCampaign); campWrap.append(campaignLine);
           if(campOpen){
             const files=document.createElement("div"); files.className="tree-files";
             if(!profil.fichiers.length){const empty=document.createElement("div");empty.className="tree-file-empty";empty.textContent="Aucun fichier importé";files.append(empty);}
@@ -480,9 +480,15 @@ class VueFichiersRecus {
     }
   }
 
-  supprimerArborescence(action, client, campagne = "") {
+  async supprimerArborescence(action, client, campagne = "") {
     const cible = action === "remove-client" ? `le client « ${client} » et toutes ses campagnes` : `la campagne « ${client}_${campagne} »`;
-    if (!confirm(`Supprimer définitivement ${cible} et les fichiers reçus enregistrés dans cette arborescence ? Cette action est irréversible.`)) return;
+    const confirme = await Dialogue.confirmer({
+      titre: "Confirmer la suppression ?",
+      message: `Vous allez supprimer définitivement ${cible}, ainsi que les fichiers reçus enregistrés dans cette arborescence. Cette action est irréversible.`,
+      details: [["Client", client], ...(campagne ? [["Campagne", campagne]] : []), ["Conséquence", "Les fichiers et l’historique associés seront supprimés"]],
+      libelleConfirmer: "Supprimer définitivement", ton: "danger", icone: "⌫"
+    });
+    if (!confirme) return;
     const estClient = p => normaliserProfilTexte(p.client) === normaliserProfilTexte(client);
     const estCampagne = p => !campagne || normaliserProfilTexte(p.campagne) === normaliserProfilTexte(campagne);
     const profils = lireProfils().filter(p => !(estClient(p) && estCampagne(p)));
@@ -698,6 +704,26 @@ class VueFichiersRecus {
     return fichier;
   }
 
+  async importerDepuisPostgres(tableName, rows) {
+    const profil = profilActif();
+    if (!profil.client || !profil.campagne) throw new Error("Choisissez le client et la campagne dans REÇU avant d’importer depuis PostgreSQL.");
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error("La source PostgreSQL ne contient aucune ligne à importer.");
+    const source = { name: `PostgreSQL · ${tableName}`, size: 0, type: "application/json" };
+    const fichier = new FichierRecu(source, rows, tableName);
+    const validateur = new ValidateurDonnees(); const bilan = validateur.analyser(fichier);
+    fichier.client = profil.client; fichier.campagne = profil.campagne; this.fichierActuel = fichier;
+    sauvegarderProfilIndex(profil.client, profil.campagne); this.profils = lireProfils(); this.actualiserListeCampagnes();
+    this.sauvegarderFichierProfil(fichier); this.actualiserListeFichiersAnciens(); this.actualiserArborescence();
+    ajouterHistoriqueRecu({ id:`recu-postgres-${Date.now()}`, date:new Date().toISOString(), vue:"Reçu", client:profil.client, campagne:profil.campagne, periode:"Importation PostgreSQL", traitement:"—", champ:"Source importée", ancienneValeur:"—", nouvelleValeur:`${tableName} (${fichier.nombreLignes} lignes)` });
+    this.fichiersSession++; this.mettreAJourIndicateurs(fichier, bilan); this.afficherTableau();
+    this.searchInput.disabled = fichier.estVide; this.exportButton.disabled = fichier.estVide; this.editModeButton.disabled = fichier.estVide; this.bulkEditButton.disabled = fichier.estVide;
+    this.modeEdition = false; this.actualiserBoutonEdition(); this.clearButton.disabled = false;
+    this.fileStatus.textContent = `PostgreSQL · ${tableName} · ${fichier.nombreLignes.toLocaleString("fr-FR")} ligne(s)`;
+    document.querySelector("#previewDescription").textContent = `PostgreSQL · ${tableName} · ${fichier.nombreLignes.toLocaleString("fr-FR")} ligne(s) · ${fichier.nombreColonnes} colonne(s)`;
+    document.dispatchEvent(new CustomEvent("recu:donnees-modifiees"));
+    Toast.afficher(`PostgreSQL importé : ${fichier.nombreLignes.toLocaleString("fr-FR")} ligne(s)`); return fichier;
+  }
+
   mettreAJourIndicateurs(fichier, bilan) {
     document.querySelector("#metricFiles").textContent = this.fichiersSession;
     document.querySelector("#metricRows").textContent = fichier.nombreLignes.toLocaleString("fr-FR");
@@ -784,7 +810,9 @@ class VueFichiersRecus {
         td.tabIndex = 0;
         td.setAttribute("role", "button");
         td.setAttribute("aria-label", `Modifier ${h}, ligne ${index + 1}`);
-        td.textContent = String(row[h] ?? "");
+        td.textContent = (typeof window.formaterValeurApercu === "function")
+          ? window.formaterValeurApercu(h, row[h])
+          : String(row[h] ?? "");
         if (h === "Old Statut") td.classList.add("old-status-column");
         td.addEventListener("click", () => { if (this.modeEdition) this.editerCellule(td, row, h); });
         td.addEventListener("keydown", event => {
@@ -1521,8 +1549,11 @@ class VueJoursFeries {
       tdJour.className = "fer-jour";
       date.addEventListener("change", () => { jour.date = date.value; this.sauvegarder(); this.actualiser(); });
       libelle.addEventListener("input", () => { jour.libelle = libelle.value; this.sauvegarder(); });
-      const suppr = document.createElement("button"); suppr.className = "button button-secondary"; suppr.textContent = "Supprimer"; suppr.setAttribute("aria-label", `Supprimer ${jour.libelle || jour.date || "cette ligne"}`);
-      suppr.addEventListener("click", () => { this.jours = this.jours.filter(x => x !== jour); this.sauvegarder(); Toast.afficher("Jour férié supprimé"); this.actualiser(); });
+      const suppr = document.createElement("button"); suppr.type = "button"; suppr.className = "button button-delete"; suppr.innerHTML = '<span aria-hidden="true">⌫</span><span>Supprimer</span>'; suppr.setAttribute("aria-label", `Supprimer ${jour.libelle || jour.date || "cette ligne"}`);
+      suppr.addEventListener("click", async () => {
+        const confirme = await Dialogue.confirmer({ titre: "Supprimer ce jour férié ?", message: "Cette date sera retirée de la liste des jours fériés.", details: [["Date", jour.date || "—"], ["Libellé", jour.libelle || "—"], ["Pays", jour.pays || "—"]], libelleConfirmer: "Supprimer", ton: "danger", icone: "⌫" });
+        if (confirme) { this.jours = this.jours.filter(x => x !== jour); this.sauvegarder(); Toast.afficher("Jour férié supprimé"); this.actualiser(); }
+      });
       tdDate.append(date); tdLib.append(libelle); tdPays.append(pays.element); tdAct.append(suppr);
       tr.append(...cellules); tbody.append(tr);
     });
@@ -1559,18 +1590,6 @@ class VuePrevision {
     this.wrapMensuel = document.querySelector("#forecastMonthlyTableWrap");
     this.wrapJournalier = document.querySelector("#forecastDailyTableWrap");
     this.wrapHistorique = document.querySelector("#forecastHistoryTableWrap");
-    document.querySelector("#forecastHistoryClient").addEventListener("change", () => this.actualiserFiltresHistorique());
-    document.querySelector("#forecastHistoryCampaign").addEventListener("change", () => this.afficherHistorique());
-    document.querySelector("#forecastHistoryType").addEventListener("change", () => this.afficherHistorique());
-    document.querySelector("#forecastHistoryClear").addEventListener("click", async () => {
-      const confirme = await Dialogue.confirmer({
-        titre: "Effacer l’historique ?",
-        message: "Toutes les modifications enregistrées (imports Reçu, prévisions mensuelles et journalières) seront supprimées. Cette action est irréversible.",
-        details: [["Entrées enregistrées", this.historique.length.toLocaleString("fr-FR")]],
-        libelleConfirmer: "Effacer l’historique", ton: "danger", icone: "⌫"
-      });
-      if (confirme) { this.historique = []; this.sauvegarderHistorique(); this.afficherHistorique(); Toast.afficher("Historique effacé"); }
-    });
     document.querySelector("#forecastMonthlyAddBatch").addEventListener("click", () => {
       const champ = document.querySelector("#forecastMonthlyAddCount");
       const nombre = Math.max(1, Math.min(100, Math.floor(Number(champ.value) || 1)));
@@ -1585,7 +1604,6 @@ class VuePrevision {
     this.initialiserSelectionJournaliere();
     document.querySelector("#forecastMonthlyTab").addEventListener("click", () => this.changerOnglet("mensuel"));
     document.querySelector("#forecastDailyTab").addEventListener("click", () => this.changerOnglet("journalier"));
-    document.querySelector("#forecastHistoryTab").addEventListener("click", () => this.changerOnglet("historique"));
     document.addEventListener("recu:donnees-modifiees", () => { this.cacheCalculRecuMensuel = null; this.cacheValeursRecu.clear(); this.cacheDernierePeriodeRecu = undefined; this.genererLignesMensuelles(); this.genererDatesJournalieres(); this.actualiserFiltresHistorique(); });
     document.addEventListener("recu:historique-modifie", () => this.actualiserFiltresHistorique());
     document.addEventListener("profil:change", () => {
@@ -1929,13 +1947,14 @@ class VuePrevision {
     }
   }
   changerOnglet(type) {
-    const mensuel = type === "mensuel", journalier = type === "journalier", historique = type === "historique";
+    // L’historique n’est plus une vue utilisateur du menu Prévision.
+    const vue = type === "historique" ? "mensuel" : type;
+    const mensuel = vue === "mensuel", journalier = vue === "journalier";
     document.querySelector("#forecastMonthlyPanel").classList.toggle("hidden", !mensuel);
     document.querySelector("#forecastDailyPanel").classList.toggle("hidden", !journalier);
-    document.querySelector("#forecastHistoryPanel").classList.toggle("hidden", !historique);
-    const tabs = [["forecastMonthlyTab",mensuel],["forecastDailyTab",journalier],["forecastHistoryTab",historique]];
-    tabs.forEach(([id, active]) => { const tab = document.querySelector(`#${id}`); tab.className = `button ${active ? "button-primary" : "button-secondary"}`; tab.setAttribute("aria-selected", String(active)); });
-    if (historique) this.actualiserFiltresHistorique();
+    document.querySelector("#forecastHistoryPanel")?.classList.add("hidden");
+    const tabs = [["forecastMonthlyTab",mensuel],["forecastDailyTab",journalier]];
+    tabs.forEach(([id, active]) => { const tab = document.querySelector(`#${id}`); if (!tab) return; tab.className = `button ${active ? "button-primary" : "button-secondary"}`; tab.setAttribute("aria-selected", String(active)); });
   }
   creerCellule(element, classe = "") {
     const td = document.createElement("td"); if (classe) td.className = classe; td.append(element); return td;
@@ -2060,9 +2079,9 @@ class VuePrevision {
 
   afficherTable(typeVue) {
     const journalier = typeVue === "journalier", lignes = this.lignes(typeVue), wrap = journalier ? this.wrapJournalier : this.wrapMensuel;
-    const table = document.createElement("table"); table.className = "data-table hyp-table";
+    const table = document.createElement("table"); table.className = `data-table hyp-table forecast-table${journalier ? " forecast-daily-table" : ""}`;
     const head = document.createElement("thead"), hr = document.createElement("tr");
-    (journalier ? ["Jour", "Mois", "Année", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée", "Action"] : ["Mois", "Année", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée", "Action"]).forEach(t => { const th = document.createElement("th"); th.textContent = t; hr.append(th); });
+    (journalier ? ["Jour (jj/mm/aaaa)", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée", "Action"] : ["Mois", "Année", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée", "Action"]).forEach(t => { const th = document.createElement("th"); th.textContent = t; hr.append(th); });
     head.append(hr); table.append(head); const body = document.createElement("tbody");
     const lignesAffichees = journalier
       ? lignes.map((ligne, index) => ({ ligne, index })).sort((a, b) => String(a.ligne.traitement || "").localeCompare(String(b.ligne.traitement || ""), "fr", { sensitivity: "base" }) || Number(a.ligne.annee) - Number(b.ligne.annee) || Number(a.ligne.mois) - Number(b.ligne.mois) || Number(a.ligne.jour) - Number(b.ligne.jour))
@@ -2070,12 +2089,11 @@ class VuePrevision {
     lignesAffichees.forEach(({ ligne, index }) => {
       const tr = document.createElement("tr");
       if (journalier) {
-        // Ordre demandé : Jour, Mois, Année, Traitement.
-        tr.append(this.creerCellule(this.creerJour(ligne, typeVue)));
-        const moisAffiche = document.createElement("span"); moisAffiche.className = "forecast-date-label"; moisAffiche.textContent = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"][(Number(ligne.mois) || 1) - 1];
-        tr.append(this.creerCellule(moisAffiche));
-        const anneeAffichee = document.createElement("span"); anneeAffichee.className = "forecast-date-label"; anneeAffichee.textContent = String(ligne.annee || "");
-        tr.append(this.creerCellule(anneeAffichee));
+        const dateAffichee = document.createElement("span");
+        dateAffichee.className = "forecast-date-label";
+        dateAffichee.textContent = `${String(ligne.jour || "").padStart(2, "0")}/${String(ligne.mois || "").padStart(2, "0")}/${String(ligne.annee || "")}`;
+        dateAffichee.title = "Date au format jj/mm/aaaa";
+        tr.append(this.creerCellule(dateAffichee, "forecast-centered-cell"));
       } else {
         tr.append(this.creerCellule(this.creerMois(ligne, typeVue)));
         tr.append(this.creerCellule(this.creerChamp(ligne, "annee", "number", "Année", typeVue)));
@@ -2099,17 +2117,17 @@ class VuePrevision {
       const tauxVariation = ligne.variation === "" || ligne.variation == null ? 0 : Number(ligne.variation);
       // Une valeur de flux prévue positive prend la priorité sur la valeur issue de Reçu/moyenne.
       // Si la variation est positive, on applique le taux au flux prévu.
-      const valeurCalculee = Number.isFinite(fluxPrevu) && fluxPrevu > 0
-        ? fluxPrevu * (Number.isFinite(tauxVariation) && tauxVariation > 0 ? 1 + tauxVariation / 100 : 1)
+      const valeurCalculee = ligne.fluxPrevu !== "" && ligne.fluxPrevu != null && Number.isFinite(fluxPrevu) && fluxPrevu >= 0
+        ? fluxPrevu * (1 + (Number.isFinite(tauxVariation) ? tauxVariation : 0) / 100)
         : ligne.previsionPrise;
       const valeurAffichee = valeurCalculee === "" || valeurCalculee == null || !Number.isFinite(Number(valeurCalculee)) ? null : Math.round(Number(valeurCalculee));
       attente.textContent = valeurAffichee === null ? "—" : valeurAffichee.toLocaleString("fr-FR", { maximumFractionDigits: 0 });
       attente.className = valeurAffichee === null ? "text-[#89938d]" : "font-semibold text-brand";
-      attente.title = Number.isFinite(fluxPrevu) && fluxPrevu > 0
-        ? (tauxVariation > 0 ? `Flux prévu ${fluxPrevu} augmenté de ${tauxVariation} %` : "Valeur égale au Flux prévu")
-        : "Mois réels : somme de la colonne Reçu par traitement. Mois futurs : moyenne des trois mois précédents, avec arrêt lorsque ces trois mois sont tous prévisionnels.";
+      attente.title = ligne.fluxPrevu !== "" && ligne.fluxPrevu != null && Number.isFinite(fluxPrevu) && fluxPrevu >= 0
+        ? `Prévision proposée = flux prévu × (1 + variation / 100) : ${fluxPrevu} × (1 + ${Number.isFinite(tauxVariation) ? tauxVariation : 0} / 100)`
+        : "Valeur calculée à partir de la prévision de référence.";
       tr.append(this.creerCellule(attente, "forecast-taken-cell"));
-      const supprimer = document.createElement("button"); supprimer.className = "button button-secondary"; supprimer.textContent = "Supprimer"; supprimer.setAttribute("aria-label", `Supprimer la ligne ${index + 1}`);
+      const supprimer = document.createElement("button"); supprimer.type = "button"; supprimer.className = "button button-delete"; supprimer.innerHTML = '<span aria-hidden="true">⌫</span><span>Supprimer</span>'; supprimer.setAttribute("aria-label", `Supprimer la ligne ${index + 1}`);
       supprimer.addEventListener("click", async () => {
         const periode = journalier ? `${String(ligne.jour || "").padStart(2, "0")}/${String(ligne.mois || "").padStart(2, "0")}/${ligne.annee || ""}` : `${String(ligne.mois || "").padStart(2, "0")}/${ligne.annee || ""}`;
         const confirme = await Dialogue.confirmer({
@@ -2139,12 +2157,15 @@ class VuePrevision {
   exporter(typeVue) {
     const mois = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
     const journalier = typeVue === "journalier";
-    const entetes = journalier ? ["Jour", "Mois", "Année", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée"] : ["Mois", "Année", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée"];
+    const entetes = journalier ? ["Jour (jj/mm/aaaa)", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée"] : ["Mois", "Année", "Traitement", "Flux prévu", "Source", "Client", "Campagne", "Variation (%)", "Prévision proposée"];
     const lignesSource = this.lignes(typeVue);
     const lignesTriees = journalier ? [...lignesSource].sort((a, b) => String(a.traitement || "").localeCompare(String(b.traitement || ""), "fr", { sensitivity: "base" }) || Number(a.annee) - Number(b.annee) || Number(a.mois) - Number(b.mois) || Number(a.jour) - Number(b.jour)) : lignesSource;
+    const calculerProposee = l => l.fluxPrevu !== "" && l.fluxPrevu != null && Number.isFinite(Number(l.fluxPrevu)) && Number(l.fluxPrevu) >= 0
+      ? Math.round(Number(l.fluxPrevu) * (1 + (l.variation === "" || l.variation == null ? 0 : Number(l.variation)) / 100))
+      : Math.round(Number(l.previsionPrise) || 0);
     const lignes = [entetes, ...lignesTriees.map(l => journalier
-      ? [l.jour || "", mois[(Number(l.mois) || 1) - 1] || "", l.annee || "", l.traitement || "", l.fluxPrevu || "", l.source || "", l.client || "", l.campagne || "", l.variation || "", Number.isFinite(Number(l.fluxPrevu)) && l.fluxPrevu !== "" && Number(l.fluxPrevu) > 0 ? Math.round(Number(l.fluxPrevu) * (Number(l.variation) > 0 ? 1 + Number(l.variation) / 100 : 1)) : Math.round(Number(l.previsionPrise) || 0)]
-      : [mois[(Number(l.mois) || 1) - 1] || "", l.annee || "", l.traitement || "", l.fluxPrevu || "", l.source || "", l.client || "", l.campagne || "", l.variation || "", Number.isFinite(Number(l.fluxPrevu)) && l.fluxPrevu !== "" && Number(l.fluxPrevu) > 0 ? Math.round(Number(l.fluxPrevu) * (Number(l.variation) > 0 ? 1 + Number(l.variation) / 100 : 1)) : Math.round(Number(l.previsionPrise) || 0)] )];
+      ? [`${String(l.jour || "").padStart(2, "0")}/${String(l.mois || "").padStart(2, "0")}/${String(l.annee || "")}`, l.traitement || "", l.fluxPrevu ?? "", l.source || "", l.client || "", l.campagne || "", l.variation ?? "", calculerProposee(l)]
+      : [mois[(Number(l.mois) || 1) - 1] || "", l.annee || "", l.traitement || "", l.fluxPrevu ?? "", l.source || "", l.client || "", l.campagne || "", l.variation ?? "", calculerProposee(l)] )];
     const csv = lignes.map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" }), url = URL.createObjectURL(blob), a = document.createElement("a");
     a.href = url; a.download = journalier ? "Previsions_journalieres.csv" : "Previsions_mensuelles.csv"; document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
@@ -2152,9 +2173,9 @@ class VuePrevision {
   }
 }
 
-/* Besoin en heure (Planify) : les 5 jours ouvrés d'une semaine, heure par heure (0 h – 23 h), par traitement. */
+/* Besoin en heure (Planify) : les 7 jours de la semaine, heure par heure (0 h – 23 h), par traitement. */
 class VueBesoinHeure {
-  static get JOURS() { return ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"]; }
+  static get JOURS() { return ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]; }
   static get MOIS() { return ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]; }
 
   constructor(obtenirFichier, obtenirHypotheses = () => ({}), obtenirFeries = () => []) {
@@ -2248,7 +2269,7 @@ class VueBesoinHeure {
   }
   static dateFr(iso) { const [y, m, d] = iso.split("-"); return `${d}/${m}/${y}`; }
   static libelleSemaine(lundi) {
-    const v = lundi, f = VueBesoinHeure.ajouterJours(lundi, 4), M = VueBesoinHeure.MOIS;
+    const v = lundi, f = VueBesoinHeure.ajouterJours(lundi, 6), M = VueBesoinHeure.MOIS;
     const [, m1, d1] = v.split("-").map(Number), [y2, m2, d2] = f.split("-").map(Number);
     return `S${VueBesoinHeure.numeroSemaine(lundi)} · ${d1} ${M[m1 - 1]} → ${d2} ${M[m2 - 1]} ${y2}`;
   }
@@ -2268,7 +2289,6 @@ class VueBesoinHeure {
       if (h === null) { stats.heure++; return; }
       const vol = volumeParLigne ? 1 : VueBesoinHeure.lireNombre(ligne["Reçu"]);
       if (vol === null) { stats.volume++; return; }
-      if (VueBesoinHeure.jourSemaine(iso) > 4) { stats.weekend++; return; }
       const nom = String(ligne["Statut"] ?? "").trim() || "Sans statut";
       if (!agg.has(iso)) agg.set(iso, new Map());
       const j = agg.get(iso);
@@ -2287,7 +2307,7 @@ class VueBesoinHeure {
     if (!this.donnees) return [];
     const { du, au } = this.etat, lundis = new Set();
     this.donnees.jours.forEach(iso => { if (iso >= du && iso <= au) lundis.add(VueBesoinHeure.lundi(iso)); });
-    return [...lundis].sort().map(lundi => ({ lundi, jours: [0, 1, 2, 3, 4].map(i => VueBesoinHeure.ajouterJours(lundi, i)), label: VueBesoinHeure.libelleSemaine(lundi) }));
+    return [...lundis].sort().map(lundi => ({ lundi, jours: [0, 1, 2, 3, 4, 5, 6].map(i => VueBesoinHeure.ajouterJours(lundi, i)), label: VueBesoinHeure.libelleSemaine(lundi) }));
   }
 
   hypothese(nom) {
@@ -2380,7 +2400,7 @@ class VueBesoinHeure {
     this.fichierRef = fichier;
     this.donnees = this.analyser(fichier);
     const d = this.donnees;
-    if (!d.jours.length) { this.rendreVide("Aucune ligne exploitable", "Les colonnes Date et Heure du fichier reçu n’ont pas pu être lues sur des jours ouvrés (lundi → vendredi)."); this.afficherIgnorees(); return; }
+    if (!d.jours.length) { this.rendreVide("Aucune ligne exploitable", "Les colonnes Date et Heure du fichier reçu n’ont pas pu être lues pour la semaine (lundi → dimanche)."); this.afficherIgnorees(); return; }
     if (nouveau || !this.etat.du) { this.etat.du = d.min; this.etat.au = d.max; this.etat.semaine = ""; this.etat.selection = new Set(d.traitements); }
     else {
       this.etat.du = this.etat.du < d.min ? d.min : this.etat.du; this.etat.au = this.etat.au > d.max ? d.max : this.etat.au;
@@ -2443,7 +2463,7 @@ class VueBesoinHeure {
     const noms = d.traitements.filter(t => this.etat.selection.has(t));
     const libMode = { besoin: "Besoin en heures", charge: "Charge en heures", volume: "Volume reçu" }[this.etat.mode];
     e.titre.textContent = `${libMode} · ${semaine.label}`;
-    e.description.textContent = `Lundi → vendredi, de 0 h à 23 h · ${noms.length} traitement${noms.length > 1 ? "s" : ""} affiché${noms.length > 1 ? "s" : ""}`;
+    e.description.textContent = `Lundi → dimanche, de 0 h à 23 h · ${noms.length} traitement${noms.length > 1 ? "s" : ""} affiché${noms.length > 1 ? "s" : ""}`;
     e.formule.textContent = { besoin: "Besoin (h) = Reçu × DMT ÷ 3 600 ÷ (occupation ÷ 60) · occupation = 60 min si non renseignée", charge: "Charge (h) = Reçu × DMT ÷ 3 600", volume: "Volume reçu = somme de la colonne Reçu pour chaque heure" }[this.etat.mode];
     e.exporter.disabled = !noms.length; if (e.exporterExcel) e.exporterExcel.disabled = !noms.length;
 
@@ -2469,12 +2489,12 @@ class VueBesoinHeure {
         t.append(label, name);
         const meta = document.createElement("span"); meta.className = "bh-meta"; meta.textContent = `Total semaine : ${this.formater(total)} ${this.unite()}`;
         sum.append(t, meta);
-        const sc = document.createElement("div"); sc.className = "bh-scroll"; sc.append(this.construireGrille(jours, series));
+        const sc = document.createElement("div"); sc.className = "bh-scroll"; sc.append(this.construireGrille(jours, series, nom));
         det.append(sum, sc); blocs.push(det);
       });
     } else {
       const bloc = document.createElement("div"); bloc.className = "bh-block";
-      const sc = document.createElement("div"); sc.className = "bh-scroll"; sc.append(this.construireGrille(jours, cumul));
+      const sc = document.createElement("div"); sc.className = "bh-scroll"; sc.append(this.construireGrille(jours, cumul, "Tous les traitements"));
       bloc.append(sc); blocs.push(bloc);
     }
     e.grille.replaceChildren(...blocs);
@@ -2524,7 +2544,7 @@ class VueBesoinHeure {
     const parHeure = Array.from({ length: 24 }, (_, h) => series.reduce((s, a) => s + a[h], 0));
     $("#besoinKpiTotalLabel").textContent = { besoin: "Besoin total de la semaine", charge: "Charge totale de la semaine", volume: "Volume reçu de la semaine" }[this.etat.mode];
     $("#besoinKpiTotal").textContent = this.formater(total);
-    $("#besoinKpiTotalDetail").textContent = u === "h" ? "heures sur les 5 jours ouvrés" : "contacts sur les 5 jours ouvrés";
+    $("#besoinKpiTotalDetail").textContent = u === "h" ? "heures sur les 7 jours" : "contacts sur les 7 jours";
     const hp = parHeure.indexOf(Math.max(...parHeure)), jp = parJour.indexOf(Math.max(...parJour));
     $("#besoinKpiPic").textContent = total > 0 ? VueBesoinHeure.heureLibelle(hp) : "—";
     $("#besoinKpiPicDetail").textContent = total > 0 ? `${this.formater(parHeure[hp])} ${u} cumulées sur la semaine` : "Aucune activité";
@@ -2550,11 +2570,9 @@ class VueBesoinHeure {
     return b;
   }
 
-  construireGrille(jours, series) {
-    /*
-     * Vue Planify : une ligne = un jour ouvré, une colonne = une heure.
-     * Cette orientation suit le modèle demandé : Date | Jour | 0 ... 23.
-     */
+  construireGrille(jours, series, nomTraitement = "Tous les traitements") {
+    /* Une ligne = un jour (lundi à dimanche), une colonne = une heure.
+       La cellule Traitement est fusionnée verticalement sur les sept jours. */
     const parJour = series.map(s => s.reduce((x, y) => x + y, 0));
     const parHeure = Array.from({ length: 24 }, (_, h) => series.reduce((s, a) => s + a[h], 0));
     const valeursPositives = series.flatMap(s => [...s]).filter(v => Number.isFinite(v) && v > 1e-9);
@@ -2589,22 +2607,32 @@ class VueBesoinHeure {
     table.className = "bh-table bh-week-table";
     const caption = document.createElement("caption");
     caption.className = "sr-only";
-    caption.textContent = "Besoin par heure de 0 h à 23 h pour les cinq jours de la semaine";
+    caption.textContent = "Besoin par heure de 0 h à 23 h pour les sept jours de la semaine";
     table.append(caption);
 
     const thead = document.createElement("thead");
+    const groupe = document.createElement("tr");
+    const thTraitement = cellule("th", "Traitement", "bh-treatment-col bh-group-head"); thTraitement.rowSpan = 2;
+    const thDate = cellule("th", "Date", "bh-date bh-group-head"); thDate.rowSpan = 2;
+    const thJour = cellule("th", "Jour", "bh-daycol bh-group-head"); thJour.rowSpan = 2;
+    const thHeures = cellule("th", "HEURES DE LA JOURNÉE", "bh-hours-group"); thHeures.colSpan = 24;
+    const thTotal = cellule("th", "Total", "bh-total bh-group-head"); thTotal.rowSpan = 2;
+    groupe.append(thTraitement, thDate, thJour, thHeures, thTotal);
     const hr = document.createElement("tr");
-    hr.append(cellule("th", "Date", "bh-date"));
-    hr.append(cellule("th", "Jour", "bh-daycol"));
-    for (let h = 0; h < 24; h++) hr.append(cellule("th", String(h), "bh-hour-col"));
-    hr.append(cellule("th", "Total", "bh-total"));
-    thead.append(hr);
+    for (let h = 0; h < 24; h++) hr.append(cellule("th", String(h).padStart(2, "0") + "h", "bh-hour-col"));
+    thead.append(groupe, hr);
     table.append(thead);
 
     const tbody = document.createElement("tbody");
     jours.forEach((j, k) => {
       const tr = document.createElement("tr");
       const valeurs = series[k] || new Float64Array(24);
+      if (k === 0) {
+        const traitement = cellule("th", nomTraitement, "bh-treatment-col bh-treatment-merged");
+        traitement.scope = "rowgroup"; traitement.rowSpan = jours.length;
+        traitement.title = `Traitement : ${nomTraitement}`;
+        tr.append(traitement);
+      }
 
       const date = cellule("th", j.date, "bh-date");
       date.scope = "row";
@@ -2782,6 +2810,50 @@ class Application {
       this.basculerMenu(false);
     }));
     document.querySelectorAll("[data-go-recu]").forEach(button => button.addEventListener("click", () => this.afficherVue("recu")));
+    document.querySelectorAll("[data-calcul-tab]").forEach(button => button.addEventListener("click", () => {
+      const onglet = button.dataset.calculTab;
+      const globalActif = onglet === "global";
+      document.querySelector("#refGlobalPanel")?.classList.toggle("hidden", !globalActif);
+      document.querySelector("#refHeurePanel")?.classList.toggle("hidden", globalActif);
+      document.querySelectorAll("[data-calcul-tab]").forEach(tab => {
+        const actif = tab === button;
+        tab.classList.toggle("active", actif);
+        tab.setAttribute("aria-selected", String(actif));
+        tab.setAttribute("tabindex", actif ? "0" : "-1");
+      });
+      if (!globalActif) this.actualiserReferenceHeureCanal();
+    }));
+    document.querySelector("#refreshReferenceCanal")?.addEventListener("click", () => { this.actualiserReferenceGlobalCanal(); this.actualiserReferenceHeureCanal(); });
+    const installerFiltreSemaine = (prefixe, actualiser) => {
+      const select = document.getElementById(`${prefixe}WeekFilter`);
+      const picker = document.getElementById(`${prefixe}WeekPicker`);
+      const toggle = document.getElementById(`${prefixe}WeekToggle`);
+      const panel = document.getElementById(`${prefixe}WeekPanel`);
+      toggle?.addEventListener("click", () => {
+        const ouvrir = panel?.classList.contains("hidden");
+        panel?.classList.toggle("hidden", !ouvrir);
+        toggle.setAttribute("aria-expanded", String(Boolean(ouvrir)));
+        if (ouvrir) document.getElementById(`${prefixe}WeekSearch`)?.focus();
+      });
+      document.getElementById(`${prefixe}WeekOptions`)?.addEventListener("change", event => {
+        const input = event.target.closest("input[data-week-value]"); if (!input) return;
+        const option = Array.from(select?.options || []).find(o => o.value === input.dataset.weekValue);
+        if (option) option.selected = input.checked;
+        actualiser();
+      });
+      document.getElementById(`${prefixe}WeekSearch`)?.addEventListener("input", event => {
+        const q = event.target.value.trim().toLocaleLowerCase("fr");
+        document.querySelectorAll(`#${prefixe}WeekOptions [data-week-row]`).forEach(row => row.classList.toggle("hidden", !row.dataset.weekRow.toLocaleLowerCase("fr").includes(q)));
+      });
+      document.getElementById(`${prefixe}WeekAll`)?.addEventListener("click", () => { if (select) Array.from(select.options).forEach(o => o.selected = true); actualiser(); });
+      document.getElementById(`${prefixe}WeekClear`)?.addEventListener("click", () => { if (select) Array.from(select.options).forEach(o => o.selected = false); actualiser(); });
+      select?.addEventListener("change", actualiser);
+      document.addEventListener("click", event => {
+        if (picker && !picker.contains(event.target)) { panel?.classList.add("hidden"); toggle?.setAttribute("aria-expanded", "false"); }
+      });
+    };
+    installerFiltreSemaine("refCanal", () => this.actualiserReferenceGlobalCanal());
+    installerFiltreSemaine("refHeure", () => this.actualiserReferenceHeureCanal());
     document.querySelector("#mobileMenu").addEventListener("click", () => this.basculerMenu(!document.querySelector("#sidebar").classList.contains("open")));
     document.querySelector("#sidebarOverlay").addEventListener("click", () => this.basculerMenu(false));
     document.addEventListener("keydown", e => { if (e.key === "Escape") this.basculerMenu(false); });
@@ -2792,9 +2864,359 @@ class Application {
     document.querySelector("#sidebarOverlay").classList.toggle("hidden", !ouvert);
   }
 
+  actualiserReferenceGlobalCanal() {
+    const fichier = this.vueRecu?.fichierActuel;
+    const lignes = Array.isArray(fichier?.donnees) ? fichier.donnees : [];
+    const jours = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+    const selectSemaines = document.getElementById("refCanalWeekFilter");
+    const selectionAvant = new Set(Array.from(selectSemaines?.selectedOptions || []).map(o => o.value));
+    const normaliserJour = valeur => {
+      const cle = String(valeur ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr");
+      return jours.findIndex(j => j.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === cle);
+    };
+    const jourDepuisDate = valeur => {
+      const brut = String(valeur ?? "").trim();
+      if (!brut) return -1;
+      let date;
+      const isoSimple = brut.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (isoSimple) date = new Date(Number(isoSimple[1]), Number(isoSimple[2]) - 1, Number(isoSimple[3]));
+      else date = new Date(brut);
+      if (!Number.isFinite(date.getTime())) return -1;
+      const d = date.getDay();
+      return d === 0 ? 6 : d - 1;
+    };
+    const lireVolume = valeur => {
+      if (typeof valeur === "number") return Number.isFinite(valeur) && valeur >= 0 ? valeur : null;
+      let texte = String(valeur ?? "").trim().replace(/[\s\u00A0\u202F']/g, "").replace(/[^0-9,.-]/g, "");
+      if (!texte || !/[0-9]/.test(texte)) return null;
+      const virgule = texte.lastIndexOf(","), point = texte.lastIndexOf(".");
+      if (virgule >= 0 && point >= 0) {
+        const dernier = Math.max(virgule, point);
+        texte = texte.replace(/[,.]/g, (m, offset) => offset === dernier ? "." : "");
+      } else if (virgule >= 0 || point >= 0) {
+        const sep = virgule >= 0 ? "," : ".", morceaux = texte.split(sep);
+        texte = morceaux.length > 2 || (morceaux.length === 2 && morceaux[1].length === 3) ? morceaux.join("") : texte.replace(sep, ".");
+      }
+      const n = Number(texte);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const valeurColonne = (ligne, noms) => {
+      if (!ligne || typeof ligne !== "object") return "";
+      for (const nom of noms) {
+        if (ligne[nom] !== undefined && ligne[nom] !== null && String(ligne[nom]).trim() !== "") return ligne[nom];
+      }
+      const normaliserCle = valeur => String(valeur ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").replace(/[^a-z0-9]/g, "");
+      const attendus = new Set(noms.map(normaliserCle));
+      const cle = Object.keys(ligne).find(k => attendus.has(normaliserCle(k)));
+      return cle ? ligne[cle] : "";
+    };
+    const semaineDe = ligne => String(valeurColonne(ligne, ["Semaine - Année", "Semaine - année", "Semaine-année", "Semaine année", "semaineAnnee"])).trim();
+    const semaines = [...new Set(lignes.map(semaineDe).filter(Boolean))].sort((a,b) => {
+      const ma = a.match(/S\s*(\d+).*?(\d{4})/i), mb = b.match(/S\s*(\d+).*?(\d{4})/i);
+      if (ma && mb) return Number(ma[2])-Number(mb[2]) || Number(ma[1])-Number(mb[1]);
+      return a.localeCompare(b, "fr", {numeric:true, sensitivity:"base"});
+    });
+    if (selectSemaines) {
+      const existantes = new Set(Array.from(selectSemaines.options).map(o => o.value));
+      if (existantes.size !== semaines.length || semaines.some(w => !existantes.has(w))) {
+        selectSemaines.replaceChildren();
+        semaines.forEach(sem => { const opt = document.createElement("option"); opt.value = sem; opt.textContent = sem; selectSemaines.append(opt); });
+      }
+      Array.from(selectSemaines.options).forEach(o => { o.selected = selectionAvant.has(o.value); });
+    }
+    const semainesSelectionnees = new Set(Array.from(selectSemaines?.selectedOptions || []).map(o => o.value));
+    const filtrerSemaines = semainesSelectionnees.size > 0;
+    const libelleFiltre = document.getElementById("refCanalWeekSelection");
+    const sousTexteFiltre = document.getElementById("refCanalWeekSubtext");
+    const compteurFiltre = document.getElementById("refCanalWeekCount");
+    const optionsFiltre = document.getElementById("refCanalWeekOptions");
+    if (libelleFiltre) libelleFiltre.textContent = filtrerSemaines ? `${semainesSelectionnees.size} semaine(s) sélectionnée(s)` : "Toutes les semaines";
+    if (sousTexteFiltre) sousTexteFiltre.textContent = filtrerSemaines ? [...semainesSelectionnees].sort((a,b)=>a.localeCompare(b,"fr",{numeric:true})).slice(0,2).join(" · ") + (semainesSelectionnees.size > 2 ? ` · +${semainesSelectionnees.size-2}` : "") : "Aucune restriction · toutes les périodes incluses";
+    if (compteurFiltre) compteurFiltre.textContent = `${semainesSelectionnees.size} / ${semaines.length} sélectionnée(s)`;
+    if (optionsFiltre) {
+      const signature = semaines.join("¦");
+      if (optionsFiltre.dataset.signature !== signature) {
+        optionsFiltre.dataset.signature = signature;
+        optionsFiltre.replaceChildren();
+        if (!semaines.length) { const empty = document.createElement("p"); empty.className = "week-picker-empty"; empty.textContent = "Aucune période disponible"; optionsFiltre.append(empty); }
+        semaines.forEach(sem => {
+          const label = document.createElement("label"); label.className = "week-picker-option"; label.dataset.weekRow = sem;
+          const input = document.createElement("input"); input.type = "checkbox"; input.dataset.weekValue = sem;
+          const name = document.createElement("span"); name.className = "week-picker-option-name"; name.textContent = sem;
+          const mark = document.createElement("span"); mark.className = "week-picker-check"; mark.textContent = "✓";
+          label.append(input, name, mark); optionsFiltre.append(label);
+        });
+      }
+      optionsFiltre.querySelectorAll("input[data-week-value]").forEach(input => { input.checked = semainesSelectionnees.has(input.dataset.weekValue); });
+    }
+
+    const groupes = new Map();
+    let volumeTotal = 0, lignesPrises = 0, lignesIgnorees = 0;
+    const dates = [];
+    lignes.forEach(ligne => {
+      const semaine = semaineDe(ligne);
+      if (filtrerSemaines && !semainesSelectionnees.has(semaine)) return;
+      // Dans le fichier REÇU de l'application, la valeur de Traitement porte le canal / traitement à regrouper.
+      const traitement = String(valeurColonne(ligne, ["Traitement", "Statut"])).trim();
+      const volume = lireVolume(valeurColonne(ligne, ["Reçu", "Recu"]));
+      const jourTexte = valeurColonne(ligne, ["Jour semaine", "Jour de semaine", "jourSemaine"]);
+      const jour = normaliserJour(jourTexte) >= 0 ? normaliserJour(jourTexte) : jourDepuisDate(valeurColonne(ligne, ["Date", "date"]));
+      if (!traitement || volume === null || jour < 0) { lignesIgnorees++; return; }
+      if (!groupes.has(traitement)) groupes.set(traitement, Array(7).fill(0));
+      groupes.get(traitement)[jour] += volume;
+      volumeTotal += volume;
+      lignesPrises++;
+      const d = String(valeurColonne(ligne, ["Date", "date"]) ?? "").trim();
+      if (d) dates.push(d);
+    });
+
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = String(value); };
+    setText("refCanalKpiTreatments", groupes.size.toLocaleString("fr-FR"));
+    setText("refCanalKpiVolume", volumeTotal.toLocaleString("fr-FR", { maximumFractionDigits: 2 }));
+    setText("refCanalKpiRows", lignesPrises.toLocaleString("fr-FR"));
+    setText("refCanalKpiRowsDetail", lignesIgnorees ? `${lignesIgnorees.toLocaleString("fr-FR")} ligne(s) ignorée(s) : données incomplètes` : "Toutes les lignes valides ont été analysées");
+    const period = document.getElementById("refCanalPeriod");
+    if (period) {
+      const parseDate = value => {
+        const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value).slice(0, 10);
+      };
+      const uniques = [...new Set(dates)].sort();
+      period.textContent = uniques.length ? `Période analysée : ${parseDate(uniques[0])} au ${parseDate(uniques[uniques.length - 1])}` : "Période analysée : —";
+    }
+    const badge = document.getElementById("refCanalControlBadge");
+    if (badge) {
+      const calculables = [...groupes.values()].filter(v => v.reduce((a,b)=>a+b,0) > 0).length;
+      const nonCalculables = groupes.size - calculables;
+      badge.textContent = groupes.size ? `Contrôle : ${calculables} référence(s) à 100,00 %${nonCalculables ? ` · ${nonCalculables} sans volume` : ""}` : "Contrôle : aucune donnée";
+      badge.className = groupes.size ? "inline-flex w-fit items-center rounded-full border border-[#dce9df] bg-[#f3faf4] px-3 py-1.5 text-[10px] font-bold text-[#39744c]" : "inline-flex w-fit items-center rounded-full border border-[#e5e7eb] bg-[#f8fafc] px-3 py-1.5 text-[10px] font-bold text-[#64748b]";
+    }
+    const wrap = document.getElementById("refCanalTableWrap");
+    if (!wrap) return;
+    wrap.replaceChildren();
+    if (!groupes.size) {
+      const empty = document.createElement("div"); empty.className = "empty-state";
+      const icon = document.createElement("span"); icon.className = "empty-icon"; icon.textContent = "％";
+      const title = document.createElement("strong"); title.textContent = fichier ? "Aucune ligne exploitable pour ce filtre" : "Aucune donnée disponible";
+      const p = document.createElement("p"); p.textContent = fichier ? "Vérifiez les colonnes Traitement, Reçu, Semaine - année et Jour semaine ou Date, ou choisissez d'autres semaines." : "Importez un fichier dans REÇU pour calculer automatiquement les poids journaliers.";
+      empty.append(icon, title, p); wrap.append(empty); return;
+    }
+    const table = document.createElement("table"); table.className = "data-table min-w-[980px]";
+    const thead = document.createElement("thead"), hr = document.createElement("tr");
+    ["Traitement / canal", ...jours, "Total"].forEach(label => { const th = document.createElement("th"); th.textContent = label; hr.append(th); });
+    thead.append(hr); table.append(thead);
+    const tbody = document.createElement("tbody");
+    [...groupes.entries()].sort((a,b)=>a[0].localeCompare(b[0],"fr",{sensitivity:"base"})).forEach(([traitement, volumes]) => {
+      const total = volumes.reduce((a,b)=>a+b,0);
+      const pourcentages = volumes.map(v => total > 0 ? v / total * 100 : 0);
+      // Arrondi au centième par la méthode des plus forts restes : le total affiché reste exactement égal à 100,00 %.
+      const centiemes = pourcentages.map(v => Math.floor(v * 100 + 1e-9));
+      let reste = total > 0 ? 10000 - centiemes.reduce((a,b)=>a+b,0) : 0;
+      const ordre = pourcentages.map((v,i)=>({i,reste:v*100-Math.floor(v*100)})).sort((a,b)=>b.reste-a.reste);
+      for (let i=0; i<reste && i<ordre.length; i++) centiemes[ordre[i].i]++;
+      const tr = document.createElement("tr");
+      const nom = document.createElement("td"); nom.className = "font-semibold"; nom.textContent = traitement; tr.append(nom);
+      centiemes.forEach((v,i) => {
+        const td = document.createElement("td"); td.className = "tabular-nums";
+        td.textContent = total > 0 ? `${(v/100).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})} %` : "—";
+        td.title = `Volume ${jours[i]} : ${volumes[i].toLocaleString("fr-FR",{maximumFractionDigits:2})}`;
+        tr.append(td);
+      });
+      const totalCell = document.createElement("td"); totalCell.className = total > 0 ? "font-bold text-[#39744c]" : "font-semibold text-muted"; totalCell.textContent = total > 0 ? "100,00 %" : "Non calculable"; tr.append(totalCell);
+      tbody.append(tr);
+    });
+    table.append(tbody); wrap.append(table);
+  }
+
+  actualiserReferenceHeureCanal() {
+    const fichier = this.vueRecu?.fichierActuel;
+    const lignes = Array.isArray(fichier?.donnees) ? fichier.donnees : [];
+    const selectSemaines = document.getElementById("refHeureWeekFilter");
+    const selectionAvant = new Set(Array.from(selectSemaines?.selectedOptions || []).map(o => o.value));
+    const normaliserCle = valeur => String(valeur ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("fr").replace(/[^a-z0-9]/g, "");
+    const valeurColonne = (ligne, noms) => {
+      if (!ligne || typeof ligne !== "object") return "";
+      const attendus = new Set(noms.map(normaliserCle));
+      const cle = Object.keys(ligne).find(k => attendus.has(normaliserCle(k)));
+      return cle ? ligne[cle] : "";
+    };
+    const semaineDe = ligne => String(valeurColonne(ligne, ["Semaine - Année", "Semaine - année", "Semaine-année", "Semaine année", "semaineAnnee"])).trim();
+    const semaines = [...new Set(lignes.map(semaineDe).filter(Boolean))].sort((a,b) => a.localeCompare(b, "fr", {numeric:true, sensitivity:"base"}));
+    if (selectSemaines) {
+      const existantes = new Set(Array.from(selectSemaines.options).map(o => o.value));
+      if (existantes.size !== semaines.length || semaines.some(w => !existantes.has(w))) {
+        selectSemaines.replaceChildren();
+        semaines.forEach(sem => { const opt = document.createElement("option"); opt.value = sem; opt.textContent = sem; selectSemaines.append(opt); });
+      }
+      Array.from(selectSemaines.options).forEach(o => { o.selected = selectionAvant.has(o.value); });
+    }
+    const semainesSelectionnees = new Set(Array.from(selectSemaines?.selectedOptions || []).map(o => o.value));
+    const filtrerSemaines = semainesSelectionnees.size > 0;
+    const libelle = document.getElementById("refHeureWeekSelection"), sousTexte = document.getElementById("refHeureWeekSubtext"), compteur = document.getElementById("refHeureWeekCount"), options = document.getElementById("refHeureWeekOptions");
+    if (libelle) libelle.textContent = filtrerSemaines ? `${semainesSelectionnees.size} semaine(s) sélectionnée(s)` : "Toutes les semaines";
+    if (sousTexte) sousTexte.textContent = filtrerSemaines ? [...semainesSelectionnees].sort((a,b)=>a.localeCompare(b,"fr",{numeric:true})).slice(0,2).join(" · ") + (semainesSelectionnees.size > 2 ? ` · +${semainesSelectionnees.size-2}` : "") : "Aucune restriction · toutes les périodes incluses";
+    if (compteur) compteur.textContent = `${semainesSelectionnees.size} / ${semaines.length} sélectionnée(s)`;
+    if (options) {
+      const signature = semaines.join("¦");
+      if (options.dataset.signature !== signature) {
+        options.dataset.signature = signature; options.replaceChildren();
+        if (!semaines.length) { const empty = document.createElement("p"); empty.className = "week-picker-empty"; empty.textContent = "Aucune période disponible"; options.append(empty); }
+        semaines.forEach(sem => { const label = document.createElement("label"); label.className = "week-picker-option"; label.dataset.weekRow = sem; const input = document.createElement("input"); input.type = "checkbox"; input.dataset.weekValue = sem; const name = document.createElement("span"); name.className = "week-picker-option-name"; name.textContent = sem; const mark = document.createElement("span"); mark.className = "week-picker-check"; mark.textContent = "✓"; label.append(input,name,mark); options.append(label); });
+      }
+      options.querySelectorAll("input[data-week-value]").forEach(input => input.checked = semainesSelectionnees.has(input.dataset.weekValue));
+    }
+    const lireVolume = valeur => {
+      if (typeof valeur === "number") return Number.isFinite(valeur) && valeur >= 0 ? valeur : null;
+      let t = String(valeur ?? "").trim().replace(/[\s\u00A0\u202F']/g, "").replace(/[^0-9,.-]/g, "");
+      if (!t || !/[0-9]/.test(t)) return null;
+      const virgule = t.lastIndexOf(","), point = t.lastIndexOf(".");
+      if (virgule >= 0 && point >= 0) {
+        const decimal = virgule > point ? "," : ".";
+        t = t.replace(/[,.]/g, (m, offset) => offset === Math.max(virgule, point) ? "." : "");
+      } else if (virgule >= 0 || point >= 0) {
+        const sep = virgule >= 0 ? "," : ".";
+        const morceaux = t.split(sep);
+        if (morceaux.length > 2 || (morceaux.length === 2 && morceaux[1].length === 3 && morceaux[0].length > 0)) t = morceaux.join("");
+        else t = t.replace(sep, ".");
+      }
+      const n = Number(t); return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const nomsJours = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+    const lireJour = ligne => {
+      const brut = String(valeurColonne(ligne, ["Jour Sem", "Jour Sem.", "Jour semaine", "Jour de semaine", "Jour"])).trim();
+      if (brut) {
+        const cle = normaliserCle(brut);
+        const idx = nomsJours.findIndex(j => normaliserCle(j) === cle || normaliserCle(j).startsWith(cle) || cle.startsWith(normaliserCle(j)));
+        if (idx >= 0) return idx;
+        const num = Number(brut);
+        if (Number.isInteger(num) && num >= 1 && num <= 7) return num - 1;
+      }
+      const dateBrute = String(valeurColonne(ligne, ["Date", "Date réception", "Date de réception", "Date/heure", "Horodatage", "Timestamp"])).trim();
+      if (!dateBrute) return -1;
+      let date = null;
+      const fr = dateBrute.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/);
+      if (fr) date = new Date(Date.UTC(Number(fr[3]), Number(fr[2])-1, Number(fr[1])));
+      else {
+        const iso = dateBrute.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (iso) date = new Date(Date.UTC(Number(iso[1]), Number(iso[2])-1, Number(iso[3])));
+      }
+      if (!date || Number.isNaN(date.getTime())) return -1;
+      return (date.getUTCDay() + 6) % 7;
+    };
+    const lireHeure = ligne => {
+      const direct = valeurColonne(ligne, ["Heure", "Heure réception", "Heure de réception", "Heure traitement", "Heure événement", "Time"]);
+      const extraire = valeur => {
+        const t = String(valeur ?? "").trim();
+        if (!t) return -1;
+        if (/^\d{1,2}$/.test(t)) { const seul = Number(t); return seul >= 0 && seul <= 23 ? seul : -1; }
+        const m = t.match(/(?:^|\s|T)(\d{1,2})[:hH](\d{2})(?:[:hH](\d{2}))?/);
+        if (!m) return -1;
+        const h = Number(m[1]), min = Number(m[2]);
+        return h >= 0 && h <= 23 && min >= 0 && min <= 59 ? h : -1;
+      };
+      let h = extraire(direct);
+      if (h >= 0) return h;
+      for (const nom of ["Date", "Date réception", "Date de réception", "Date/heure", "Horodatage", "Timestamp"]) {
+        h = extraire(valeurColonne(ligne, [nom]));
+        if (h >= 0) return h;
+      }
+      return -1;
+    };
+    // Une matrice indépendante par traitement et jour de semaine : chaque ligne (jour)
+    // répartit son propre volume sur les 24 heures et totalise donc 100 %.
+    const groupes = new Map();
+    let volumeTotal = 0, lignesPrises = 0, lignesIgnorees = 0;
+    const dates = [];
+    lignes.forEach(ligne => {
+      const semaine = semaineDe(ligne);
+      if (filtrerSemaines && !semainesSelectionnees.has(semaine)) return;
+      const traitement = String(valeurColonne(ligne, ["Traitement", "Statut"])).trim();
+      const volume = lireVolume(valeurColonne(ligne, ["Reçu", "Recu"]));
+      const heure = lireHeure(ligne);
+      const jour = lireJour(ligne);
+      if (!traitement || volume === null || heure < 0 || jour < 0) { lignesIgnorees++; return; }
+      if (!groupes.has(traitement)) groupes.set(traitement, Array.from({length:7}, () => Array(24).fill(0)));
+      groupes.get(traitement)[jour][heure] += volume;
+      volumeTotal += volume; lignesPrises++;
+      const d = String(valeurColonne(ligne, ["Date", "Date réception", "Date de réception"]) ?? "").trim(); if (d) dates.push(d);
+    });
+    const setText = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = String(value); };
+    setText("refHeureKpiTreatments", groupes.size.toLocaleString("fr-FR"));
+    setText("refHeureKpiVolume", volumeTotal.toLocaleString("fr-FR", { maximumFractionDigits: 2 }));
+    setText("refHeureKpiRows", lignesPrises.toLocaleString("fr-FR"));
+    setText("refHeureKpiRowsDetail", lignesIgnorees ? `${lignesIgnorees.toLocaleString("fr-FR")} ligne(s) ignorée(s) : jour, heure, traitement ou volume manquant` : "Toutes les lignes valides ont été analysées");
+    const badge = document.getElementById("refHeureControlBadge");
+    const lignesJour = [...groupes.values()].flat();
+    const calculables = lignesJour.filter(v => v.reduce((a,b)=>a+b,0) > 0).length;
+    if (badge) badge.textContent = groupes.size ? `Contrôle : ${calculables} jour(s) à 100,00 %` : "Contrôle : aucune donnée horaire exploitable";
+    const period = document.getElementById("refHeurePeriod");
+    if (period) {
+      const uniques = [...new Set(dates)].sort();
+      period.textContent = uniques.length ? `Période analysée : ${uniques[0]} au ${uniques[uniques.length-1]}` : "Période analysée : —";
+    }
+    const wrap = document.getElementById("refHeureTableWrap"); if (!wrap) return;
+    wrap.replaceChildren();
+    if (!groupes.size) {
+      const empty = document.createElement("div"); empty.className = "empty-state";
+      const icon = document.createElement("span"); icon.className = "empty-icon"; icon.textContent = "◷";
+      const title = document.createElement("strong"); title.textContent = fichier ? "Aucune donnée horaire exploitable" : "Aucune donnée disponible";
+      const p = document.createElement("p"); p.textContent = "Vérifiez la présence d'une heure (HH:mm) et d'un jour de semaine ou d'une date dans REÇU.";
+      empty.append(icon,title,p); wrap.append(empty); return;
+    }
+    const repartir = volumes => {
+      const total = volumes.reduce((a,b)=>a+b,0);
+      const bruts = volumes.map(v => total > 0 ? v / total * 10000 : 0);
+      const bases = bruts.map(Math.floor);
+      const reste = total > 0 ? 10000 - bases.reduce((a,b)=>a+b,0) : 0;
+      [...bruts.keys()].sort((a,b)=>(bruts[b]-bases[b])-(bruts[a]-bases[a])).slice(0,reste).forEach(i=>bases[i]++);
+      return {total, bases};
+    };
+    const table = document.createElement("table"); table.className = "ref-hour-matrix ref-hour-matrix-unified";
+    const thead = document.createElement("thead"), trh = document.createElement("tr");
+    ["Statut", "Jour"].forEach(label => { const th = document.createElement("th"); th.textContent = label; trh.append(th); });
+    for (let h=0; h<24; h++) { const th = document.createElement("th"); th.textContent = String(h).padStart(2,"0"); th.title = `Heure ${h}`; trh.append(th); }
+    thead.append(trh); table.append(thead);
+    const tbody = document.createElement("tbody");
+    const entrees = [...groupes.entries()].sort((a,b)=>a[0].localeCompare(b[0],"fr",{sensitivity:"base"}));
+    entrees.forEach(([traitement, jours], indexTraitement) => {
+      const repartitions = jours.map(volumes => repartir(volumes));
+      const maximum = Math.max(0, ...repartitions.flatMap(rep => rep.bases));
+      nomsJours.forEach((nom, j) => {
+        const rep = repartitions[j];
+        const tr = document.createElement("tr");
+        tr.className = `ref-hour-treatment-group ${indexTraitement % 2 ? "group-alt" : "group-base"}`;
+        if (j === 0) {
+          tr.classList.add("group-start");
+          const tdTraitement = document.createElement("th");
+          tdTraitement.className = "ref-hour-treatment-merged";
+          tdTraitement.scope = "rowgroup"; tdTraitement.rowSpan = nomsJours.length;
+          const label = document.createElement("span"); label.textContent = traitement;
+          tdTraitement.append(label); tdTraitement.title = `Statut : ${traitement}`;
+          tr.append(tdTraitement);
+        }
+        const th = document.createElement("th"); th.scope = "row"; th.textContent = nom;
+        th.title = rep.total > 0 ? `Total du jour : ${rep.total.toLocaleString("fr-FR")}` : "Aucun volume reçu";
+        tr.append(th);
+        for (let h=0; h<24; h++) {
+          const td = document.createElement("td"); const v = rep.bases[h];
+          td.textContent = rep.total > 0 ? `${(v/100).toLocaleString("fr-FR",{minimumFractionDigits:2,maximumFractionDigits:2})}%` : "—";
+          td.title = `${traitement} · ${nom} · ${h}h · Volume : ${jours[j][h].toLocaleString("fr-FR")}`;
+          if (v > 0 && maximum > 0) {
+            const ratio = v / maximum;
+            td.className = ratio >= .75 ? "weight-level-4" : ratio >= .5 ? "weight-level-3" : ratio >= .25 ? "weight-level-2" : "weight-level-1";
+          } else td.className = "weight-zero";
+          tr.append(td);
+        }
+        tbody.append(tr);
+      });
+    });
+    table.append(tbody); wrap.append(table);
+  }
+
   actualiserDashboard() {
     const fichier = this.vueRecu.fichierActuel;
-    const lignes = fichier && Array.isArray(fichier.donnees) ? fichier.donnees.length : 0;
+    const donnees = fichier && Array.isArray(fichier.donnees) ? fichier.donnees : [];
+    const lignes = donnees.length;
     const detailFichier = document.querySelector("#dashFichierDetail");
     document.querySelector("#dashFichier").textContent = fichier ? fichier.nom : "Aucun fichier";
     detailFichier.textContent = fichier
@@ -2802,44 +3224,107 @@ class Application {
       : "Importez un fichier dans REÇU pour commencer.";
 
     const p = this.vueHypotheses.progression();
+    const listeTraitements = this.vueHypotheses.traitements();
     const nbLignes = fichier ? (fichier.nombreLignes ?? lignes) : 0;
     const reste = Math.max(0, p.total - p.complets);
     document.querySelector("#dashRows").textContent = nbLignes.toLocaleString("fr-FR");
     document.querySelector("#dashRowsDetail").textContent = fichier ? "lignes dans le fichier actif" : "Aucune donnée importée";
 
-    // Compter les clients distincts, et non les couples client/campagne.
     const clientsDistincts = new Map();
     const ajouterClient = valeur => {
       const nom = String(valeur ?? "").trim();
       const cle = normaliserProfilTexte(nom);
-      if (nom && cle && cle !== "non renseigne" && cle !== "non renseignee") {
-        if (!clientsDistincts.has(cle)) clientsDistincts.set(cle, nom);
-      }
+      if (nom && cle && cle !== "non renseigne" && cle !== "non renseignee" && !clientsDistincts.has(cle)) clientsDistincts.set(cle, nom);
     };
     lireProfils().forEach(profil => ajouterClient(profil?.client));
     try {
       const stockProfils = JSON.parse(localStorage.getItem("dimensionnement.recu.profils.v1")) || {};
       Object.values(stockProfils).forEach(profil => ajouterClient(profil?.client));
     } catch {}
-    const nombreClients = clientsDistincts.size;
-    const dashClients = document.querySelector("#dashClients");
-    const dashClientsDetail = document.querySelector("#dashClientsDetail");
-    if (dashClients) dashClients.textContent = nombreClients.toLocaleString("fr-FR");
-    if (dashClientsDetail) dashClientsDetail.textContent = nombreClients ? "clients distincts enregistrés" : "Aucun client enregistré";
-
+    document.querySelector("#dashClients").textContent = clientsDistincts.size.toLocaleString("fr-FR");
+    document.querySelector("#dashClientsDetail").textContent = clientsDistincts.size ? "clients distincts enregistrés" : "Aucun client enregistré";
     document.querySelector("#dashTreatments").textContent = p.total.toLocaleString("fr-FR");
     document.querySelector("#dashTreatmentsDetail").textContent = p.total ? "traitement(s) distinct(s) issu(s) de Statut" : "Aucun traitement détecté";
     document.querySelector("#dashTraitements").textContent = `${p.complets} / ${p.total}`;
-    document.querySelector("#dashTraitementsDetail").textContent = p.total
-      ? `${Math.round((p.complets / p.total) * 100)} % des traitements entièrement renseignés`
-      : "Aucune hypothèse renseignée";
+    document.querySelector("#dashTraitementsDetail").textContent = p.total ? `${Math.round((p.complets / p.total) * 100)} % des traitements entièrement renseignés` : "Aucune hypothèse renseignée";
     const pct = p.total ? Math.round((p.complets / p.total) * 100) : 0;
     document.querySelector("#dashBar").style.width = `${pct}%`;
     document.querySelector("#dashBarWrap").setAttribute("aria-valuenow", String(pct));
     document.querySelector("#dashRemaining").textContent = reste.toLocaleString("fr-FR");
-    document.querySelector("#dashRemainingDetail").textContent = reste
-      ? "traitement(s) avec des paramètres à renseigner"
-      : (p.total ? "Toutes les hypothèses sont complètes" : "Aucune action en attente");
+    document.querySelector("#dashRemainingDetail").textContent = reste ? "traitement(s) avec des paramètres à renseigner" : (p.total ? "Toutes les hypothèses sont complètes" : "Aucune action en attente");
+
+    const fmt = (valeur, suffixe = "") => valeur === null || valeur === undefined || String(valeur).trim() === "" || !Number.isFinite(Number(valeur)) ? "À renseigner" : `${Number(valeur).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}${suffixe}`;
+    const valeurs = listeTraitements.map(({ nom, lignes: nb }) => {
+      const h = this.vueHypotheses.valeurs[nom] || {};
+      const dmt = String(h.dmt || "").trim();
+      let secondes = null;
+      if (dmt) {
+        const morceaux = dmt.split(":").map(Number);
+        if (morceaux.length === 3 && morceaux.every(Number.isFinite)) secondes = morceaux[0] * 3600 + morceaux[1] * 60 + morceaux[2];
+        else if (morceaux.length === 2 && morceaux.every(Number.isFinite)) secondes = morceaux[0] * 60 + morceaux[1];
+        else if (Number.isFinite(Number(dmt))) secondes = Number(dmt) * 60;
+      }
+      return { nom, lignes: nb, h, secondes };
+    });
+    const moyen = (items, cle) => { const nums = items.map(x => String(x.h[cle] ?? "").trim() === "" ? null : Number(x.h[cle])).filter(n => n !== null && Number.isFinite(n) && n >= 0); return nums.length ? nums.reduce((a,b)=>a+b,0)/nums.length : null; };
+    const dmtValides = valeurs.map(x => x.secondes).filter(n => n !== null && Number.isFinite(n));
+    const dmtMoyen = dmtValides.length ? dmtValides.reduce((a,b)=>a+b,0)/dmtValides.length : null;
+    const formaterDuree = sec => sec === null ? "À renseigner" : `${String(Math.floor(sec/3600)).padStart(2,"0")}:${String(Math.floor((sec%3600)/60)).padStart(2,"0")}:${String(Math.round(sec%60)).padStart(2,"0")}`;
+    const set = (id, value) => { const el = document.getElementById(id); if (el) el.textContent = value; };
+    set("dashDmtAverage", formaterDuree(dmtMoyen));
+    set("dashOccupationAverage", fmt(moyen(valeurs, "occupation"), " min"));
+    set("dashWorkHoursAverage", fmt(moyen(valeurs, "heureTravail"), " h"));
+    const productions = valeurs.map(x => String(x.h.production ?? "").trim() === "" ? null : Number(x.h.production)).filter(n => n !== null && Number.isFinite(n) && n >= 0);
+    set("dashProductionTotal", productions.length ? productions.reduce((a,b)=>a+b,0).toLocaleString("fr-FR", {maximumFractionDigits:2}) : "À renseigner");
+    const horaires = cle => [...new Set(valeurs.map(x => String(x.h[cle] || "").trim()).filter(Boolean))];
+    const ho = horaires("ho"), fin = horaires("finShift");
+    set("dashHoSummary", ho.length ? (ho.length <= 3 ? ho.join(" · ") : `${ho.length} horaires distincts`) : "À renseigner");
+    set("dashFinShiftSummary", fin.length ? (fin.length <= 3 ? fin.join(" · ") : `${fin.length} horaires distincts`) : "À renseigner");
+
+    const chart = document.querySelector("#dashTreatmentChart");
+    if (chart) {
+      chart.replaceChildren();
+      const max = Math.max(1, ...valeurs.map(x => x.lignes));
+      const top = [...valeurs].sort((a,b)=>b.lignes-a.lignes).slice(0,6);
+      if (!top.length) chart.innerHTML = '<p class="text-xs text-muted">Importez un fichier Reçu pour afficher le graphique.</p>';
+      else top.forEach(item => {
+        const ligne = document.createElement("div"); ligne.className = "flex flex-col gap-1";
+        const haut = document.createElement("div"); haut.className = "flex items-center justify-between gap-3 text-[11px]";
+        const nom = document.createElement("span"); nom.className = "min-w-0 truncate font-semibold text-ink"; nom.textContent = item.nom; nom.title = item.nom;
+        const compte = document.createElement("strong"); compte.className = "shrink-0 text-muted"; compte.textContent = item.lignes.toLocaleString("fr-FR"); haut.append(nom,compte);
+        const rail = document.createElement("div"); rail.className = "h-2 overflow-hidden rounded-full bg-[#e9eee9]";
+        const barre = document.createElement("div"); barre.className = "h-full rounded-full bg-brand transition-all"; barre.style.width = `${Math.max(2, item.lignes/max*100)}%`; rail.append(barre);
+        ligne.append(haut,rail); chart.append(ligne);
+      });
+    }
+    const report = document.querySelector("#dashParameterReport");
+    if (report) {
+      const nbChamps = VueHypotheses.CHAMPS.length;
+      const totalChamps = valeurs.length * nbChamps;
+      const renseignes = valeurs.reduce((n, item) => n + VueHypotheses.CHAMPS.filter(c => String(item.h[c.cle] ?? "").trim() !== "").length, 0);
+      const manquants = Math.max(0,totalChamps-renseignes);
+      report.replaceChildren();
+      const p1 = document.createElement("p"); p1.className = "font-semibold text-ink"; p1.textContent = `${renseignes.toLocaleString("fr-FR")} / ${totalChamps.toLocaleString("fr-FR")} paramètres renseignés`;
+      const p2 = document.createElement("p"); p2.className = "mt-1"; p2.textContent = valeurs.length ? `${manquants.toLocaleString("fr-FR")} valeur(s) à compléter · ${pct} % des traitements entièrement configurés.` : "Aucune donnée disponible : importez d’abord un fichier Reçu.";
+      const p3 = document.createElement("p"); p3.className = "mt-2"; p3.textContent = productions.length ? `Production hebdomadaire cumulée : ${productions.reduce((a,b)=>a+b,0).toLocaleString("fr-FR",{maximumFractionDigits:2})}.` : "La production hebdomadaire n’est pas encore renseignée.";
+      report.append(p1,p2,p3);
+    }
+    const tableWrap = document.querySelector("#dashParameterTable");
+    if (tableWrap) {
+      if (!valeurs.length) { tableWrap.innerHTML = '<div class="empty-state"><strong>Aucun traitement disponible</strong><p>Importez un fichier Reçu pour alimenter ce tableau.</p></div>'; }
+      else {
+        const table = document.createElement("table"); table.className = "data-table";
+        const thead = document.createElement("thead"), hr = document.createElement("tr");
+        ["Traitement","Lignes Reçu","DMT","Occupation (min)","HO","Production / semaine","Fin de shift","Heure de travail (h)"].forEach(t => { const th=document.createElement("th"); th.textContent=t; hr.append(th); }); thead.append(hr); table.append(thead);
+        const tbody = document.createElement("tbody");
+        valeurs.forEach(item => {
+          const tr=document.createElement("tr");
+          const cells=[item.nom,item.lignes.toLocaleString("fr-FR"),item.h.dmt || "À renseigner",fmt(item.h.occupation),item.h.ho || "À renseigner",fmt(item.h.production),item.h.finShift || "À renseigner",fmt(item.h.heureTravail)];
+          cells.forEach((value,i)=>{const td=document.createElement("td");td.textContent=String(value);if(i===0)td.className="hyp-name";if(String(value)==="À renseigner")td.classList.add("text-muted");tr.append(td);});
+          tbody.append(tr);
+        }); table.append(tbody); tableWrap.replaceChildren(table);
+      }
+    }
   }
 
   actualiserContexteBesoin() {
@@ -2875,11 +3360,12 @@ class Application {
     const cible = document.querySelector(`#${vueCible}View`);
     if (cible) cible.classList.remove("hidden");
     document.querySelectorAll("[data-view]").forEach(button => button.classList.toggle("active", button.dataset.view === vue));
-    const titres = { recu: "REÇU", archive: "ARCHIVE IMPORT", hypotheses: "HYPOTHÈSES", feries: "JOURS FÉRIÉS", prevision: "PRÉVISION", besoin: "BESOIN EN HEURE", historique: "HISTORIQUE", dashboard: "TABLEAU DE BORD" };
+    const titres = { recu: "REÇU", archive: "ARCHIVE IMPORT", hypotheses: "HYPOTHÈSES", calculs: "CALCULS INTERMÉDIAIRES", feries: "JOURS FÉRIÉS", prevision: "PRÉVISION", besoin: "BESOIN EN HEURE", historique: "HISTORIQUE", dashboard: "TABLEAU DE BORD" };
     document.querySelector("#breadcrumbCurrent").textContent = titres[vue] || "TABLEAU DE BORD";
     const besoinHeaderContext = document.querySelector("#besoinHeaderContext");
     if (besoinHeaderContext) besoinHeaderContext.classList.remove("hidden");
     if (vue === "hypotheses") this.vueHypotheses.actualiser();
+    if (vue === "calculs") { this.actualiserReferenceGlobalCanal(); this.actualiserReferenceHeureCanal(); }
     if (vue === "feries") this.vueFeries.actualiser();
     if (vue === "prevision" || vue === "historique") {
       this.vuePrevision.actualiser();
@@ -2895,7 +3381,58 @@ class Application {
 document.addEventListener("DOMContentLoaded", () => {
   window.application = new Application();
   initialiserDemonstrationAzure();
+  initialiserImportPostgres();
 });
+
+
+function preparerProfilImportExterne(prefix) {
+ const client=String(document.querySelector(`#${prefix}ImportClient`)?.value||"").trim();
+ const campagne=String(document.querySelector(`#${prefix}ImportCampaign`)?.value||"").trim();
+ if(!client||!campagne) throw new Error("Renseignez le client et la campagne avant de lancer l’import.");
+ const vue=window.application?.vueRecu; if(!vue?.clientInput||!vue?.campagneInput||typeof vue.appliquerProfilActif!=="function") throw new Error("Le gestionnaire de profils de REÇU n’est pas disponible.");
+ vue.clientInput.value=client; vue.campagneInput.value=campagne; vue.appliquerProfilActif(true); sauvegarderProfilIndex(client,campagne); if(Array.isArray(vue.profils))vue.profils=lireProfils(); vue.actualiserListeCampagnes?.(); vue.actualiserListeFichiersAnciens?.(); vue.actualiserArborescence?.(); document.dispatchEvent(new CustomEvent("profil:change",{detail:{client,campagne,cle:cleProfil(client,campagne)}}));
+}
+function initialiserChampsProfilImport(prefix){
+ const ci=document.querySelector(`#${prefix}ImportClient`),ca=document.querySelector(`#${prefix}ImportCampaign`);if(!ci||!ca)return;const profils=lireProfils();
+ const fill=(id,vals)=>{const dl=document.querySelector(`#${id}`);if(dl)dl.replaceChildren(...[...new Set(vals.filter(Boolean))].map(v=>{const o=document.createElement("option");o.value=v;return o;}));};
+ fill(`${prefix}ImportClients`,profils.map(p=>p.client));const last=(()=>{try{return JSON.parse(localStorage.getItem("dimensionnement.profilActif.v1"))||{};}catch{return {};}})();ci.value=last.client||"";ca.value=last.campagne||"";const update=()=>fill(`${prefix}ImportCampaigns`,profils.filter(p=>!ci.value.trim()||normaliserProfilTexte(p.client)===normaliserProfilTexte(ci.value)).map(p=>p.campagne));ci.addEventListener("input",update);update();
+}
+
+// Formateur global partagé par les aperçus Azure SQL et PostgreSQL.
+// Les timestamps ISO sont lus par leur date calendaire (sans conversion de fuseau).
+window.formaterValeurApercu = function formaterValeurApercu(column, value) {
+  if (value == null || value === "") return "";
+  const raw = value instanceof Date ? value.toISOString() : String(value).trim();
+  const nomColonne = String(column ?? "").trim().toLocaleLowerCase("fr-FR");
+  const estColonneDate = /(^|[^a-z])date([^a-z]|$)/i.test(nomColonne)
+    || nomColonne.startsWith("date_") || nomColonne.endsWith("_date")
+    || /date|jour|timestamp|datetime/i.test(nomColonne);
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+  if (iso && (estColonneDate || /T\d{2}:\d{2}/.test(raw))) {
+    // Une date seule reste inchangée. Un timestamp est converti dans le fuseau
+    // local du poste : à Madagascar, 2026-07-31T22:00:00.000Z devient 01/08/2026.
+    if (!/[T ]\d{2}:\d{2}/.test(raw)) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+    const parsedIso = new Date(raw);
+    if (!Number.isNaN(parsedIso.getTime())) {
+      const parts = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "Indian/Antananarivo", day: "2-digit", month: "2-digit", year: "numeric"
+      }).formatToParts(parsedIso);
+      const jj = parts.find(part => part.type === "day")?.value || iso[3];
+      const mm = parts.find(part => part.type === "month")?.value || iso[2];
+      const aaaa = parts.find(part => part.type === "year")?.value || iso[1];
+      return `${jj}/${mm}/${aaaa}`;
+    }
+    return `${iso[3]}/${iso[2]}/${iso[1]}`;
+  }
+  if (!estColonneDate) return String(value);
+  const fr = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (fr) return raw;
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return new Intl.DateTimeFormat("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(parsed);
+  }
+  return raw;
+};
 
 function initialiserDemonstrationAzure() {
   const modal = document.querySelector("#azureDemoModal");
@@ -2907,7 +3444,7 @@ function initialiserDemonstrationAzure() {
   const refreshTables = document.querySelector("#azureRefreshTables");
   if (!modal || !open || !status || !preview) return;
   const setStatus = (message, kind = "") => { status.className = `azure-demo-status${kind ? ` azure-status-${kind}` : ""}`; status.textContent = message; };
-  const showModal = () => { modal.classList.remove("hidden"); document.body.classList.add("azure-modal-open"); setStatus("Prêt à contacter le service Azure configuré sur le serveur."); preview.classList.add("hidden"); close?.focus(); };
+  const showModal = () => { initialiserChampsProfilImport("azure"); modal.classList.remove("hidden"); document.body.classList.add("azure-modal-open"); setStatus("Choisissez le client et la campagne avant l’import Azure."); preview.classList.add("hidden"); close?.focus(); };
   const hideModal = () => { modal.classList.add("hidden"); document.body.classList.remove("azure-modal-open"); open.focus(); };
   const api = async (url, options = {}) => {
     const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
@@ -2950,7 +3487,7 @@ function initialiserDemonstrationAzure() {
       const thead = preview.querySelector("thead"); const tbody = preview.querySelector("tbody");
       thead.replaceChildren(); tbody.replaceChildren();
       const headerRow = document.createElement("tr"); columns.slice(0, 8).forEach(column => { const th = document.createElement("th"); th.textContent = column; headerRow.append(th); }); thead.append(headerRow);
-      rows.slice(0, 8).forEach(row => { const tr = document.createElement("tr"); columns.slice(0, 8).forEach(column => { const td = document.createElement("td"); td.textContent = String(row[column] ?? ""); tr.append(td); }); tbody.append(tr); });
+      rows.slice(0, 8).forEach(row => { const tr = document.createElement("tr"); columns.slice(0, 8).forEach(column => { const td = document.createElement("td"); td.textContent = window.formaterValeurApercu(column, row[column]); tr.append(td); }); tbody.append(tr); });
       document.querySelector("#azurePreviewTitle").textContent = result.table || table;
       preview.querySelector(".azure-preview-count").textContent = `${rows.length.toLocaleString("fr-FR")} ligne(s)`;
       preview.querySelector(".azure-preview-footnote").textContent = `Aperçu réel issu d’Azure SQL. Limite de sécurité : ${result.limit || 5000} lignes par import.`;
@@ -2958,7 +3495,7 @@ function initialiserDemonstrationAzure() {
       const importButton = document.querySelector("#azureImportData"); importButton.disabled = false;
       importButton.onclick = async () => {
         importButton.disabled = true;
-        try { await window.application.vueRecu.importerDepuisAzure(result.table || table, rows); setStatus(`${rows.length.toLocaleString("fr-FR")} ligne(s) importée(s) dans REÇU.`, "success"); hideModal(); }
+        try { preparerProfilImportExterne("azure"); await window.application.vueRecu.importerDepuisAzure(result.table || table, rows); setStatus(`${rows.length.toLocaleString("fr-FR")} ligne(s) importée(s) dans REÇU.`, "success"); hideModal(); }
         catch (error) { setStatus(error.message, "warning"); }
         finally { importButton.disabled = false; }
       };
@@ -2967,4 +3504,26 @@ function initialiserDemonstrationAzure() {
     } catch (error) { setStatus(error.message, "warning"); }
     finally { button.disabled = false; }
   });
+}
+
+
+function initialiserImportPostgres() {
+  const modal = document.querySelector("#postgresImportModal"), open = document.querySelector("#openPostgresImport");
+  const status = document.querySelector("#postgresImportStatus"), preview = document.querySelector("#postgresImportPreview");
+  const schemaSelect = document.querySelector("#postgresSchema"), tableSelect = document.querySelector("#postgresTable");
+  if (!modal || !open || !status || !preview) return;
+  let previewRows = [], previewTable = "";
+  const setStatus = (message, kind = "") => { status.className = `azure-demo-status${kind ? ` azure-status-${kind}` : ""}`; status.textContent = message; };
+  const showModal = () => { initialiserChampsProfilImport("postgres"); modal.classList.remove("hidden"); document.body.classList.add("azure-modal-open"); setStatus("Choisissez le client et la campagne avant l’import PostgreSQL."); preview.classList.add("hidden"); document.querySelector("#closePostgresImport")?.focus(); };
+  const hideModal = () => { modal.classList.add("hidden"); document.body.classList.remove("azure-modal-open"); open.focus(); };
+  const api = async (url, options = {}) => { const response = await fetch(url, { headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options }); let payload = {}; try { payload = await response.json(); } catch {} if (!response.ok) throw new Error(payload.error || `Erreur du service (${response.status}).`); return payload; };
+  open.addEventListener("click", showModal); document.querySelector("#closePostgresImport")?.addEventListener("click", hideModal);
+  modal.querySelectorAll("[data-postgres-close]").forEach(el => el.addEventListener("click", hideModal));
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !modal.classList.contains("hidden")) hideModal(); });
+  document.querySelector("#postgresTestConnection")?.addEventListener("click", async e => { const button=e.currentTarget; button.disabled=true; setStatus("Vérification de la connexion PostgreSQL…"); try { const r=await api("/api/postgres/status"); setStatus(r.message || "Connexion PostgreSQL opérationnelle.","success"); } catch(err) { setStatus(`${err.message} Vérifiez que PostgreSQL et le serveur de l’application sont démarrés, puis contrôlez le fichier .env.`,"warning"); } finally { button.disabled=false; } });
+  document.querySelector("#postgresRefreshTables")?.addEventListener("click", async e => { const button=e.currentTarget; button.disabled=true; setStatus("Chargement des tables et vues PostgreSQL…"); try { const r=await api("/api/postgres/tables"); const schemas=[...new Set(r.tables.map(t=>t.schema))]; schemaSelect.replaceChildren(); schemas.forEach(sc=>{const o=document.createElement("option");o.value=sc;o.textContent=sc;schemaSelect.append(o)}); if(!schemas.length) throw new Error("Aucune table ou vue accessible trouvée."); fillTables(r.tables); setStatus(`${r.tables.length} table(s)/vue(s) disponible(s). Choisissez une source puis prévisualisez.`,"success"); } catch(err){setStatus(err.message,"warning")} finally{button.disabled=false} });
+  let availableTables=[]; function fillTables(tables){ availableTables=tables; const schema=schemaSelect.value; tableSelect.replaceChildren(); tables.filter(t=>t.schema===schema).forEach(t=>{const o=document.createElement("option");o.value=t.name;o.textContent=`${t.name} (${t.type})`;tableSelect.append(o)}); }
+  schemaSelect.addEventListener("change",()=>fillTables(availableTables));
+  document.querySelector("#postgresLoadPreview")?.addEventListener("click", async e => { const button=e.currentTarget, schema=schemaSelect.value, table=tableSelect.value, limit=Number(document.querySelector("#postgresLimit").value)||5000; if(!schema||!table){setStatus("Chargez d’abord les tables PostgreSQL puis sélectionnez une source.","warning");return} button.disabled=true; setStatus("Lecture des données depuis PostgreSQL…"); preview.classList.add("hidden"); document.querySelector("#postgresImportData").disabled=true; try { const r=await api("/api/postgres/import",{method:"POST",body:JSON.stringify({schema,table,limit})}); previewRows=Array.isArray(r.rows)?r.rows:[]; previewTable=`${schema}.${table}`; if(!previewRows.length){setStatus("La table ne contient aucune ligne à importer.","warning");return} const columns=Object.keys(previewRows[0]), thead=preview.querySelector("thead"), tbody=preview.querySelector("tbody"); thead.replaceChildren();tbody.replaceChildren(); const hr=document.createElement("tr");columns.slice(0,8).forEach(c=>{const th=document.createElement("th");th.textContent=c;hr.append(th)});thead.append(hr);previewRows.slice(0,8).forEach(row=>{const tr=document.createElement("tr");columns.slice(0,8).forEach(c=>{const td=document.createElement("td");td.textContent=window.formaterValeurApercu(c,row[c]);tr.append(td)});tbody.append(tr)}); document.querySelector("#postgresPreviewTitle").textContent=previewTable;preview.querySelector(".azure-preview-count").textContent=`${previewRows.length.toLocaleString("fr-FR")} ligne(s)`;preview.querySelector(".azure-preview-footnote").textContent=`Aperçu PostgreSQL réel. Limite appliquée : ${r.limit||limit} lignes.`;preview.classList.remove("hidden");document.querySelector("#postgresImportData").disabled=false;setStatus(`Aperçu chargé : ${previewRows.length.toLocaleString("fr-FR")} ligne(s). Vérifiez les données puis cliquez sur « Importer dans REÇU ».`,"success");preview.scrollIntoView({behavior:"smooth",block:"nearest"}); }catch(err){setStatus(err.message,"warning")}finally{button.disabled=false} });
+  document.querySelector("#postgresImportData")?.addEventListener("click", async e=>{const button=e.currentTarget;if(!previewRows.length)return;button.disabled=true;try{preparerProfilImportExterne("postgres"); await window.application.vueRecu.importerDepuisPostgres(previewTable,previewRows);setStatus(`${previewRows.length.toLocaleString("fr-FR")} ligne(s) importée(s) dans REÇU.`,"success");hideModal()}catch(err){setStatus(err.message,"warning")}finally{button.disabled=false}});
 }

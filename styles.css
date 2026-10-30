@@ -982,3 +982,75 @@ body.pm-open{overflow:hidden}
 #refHeureTableWrap .ref-hour-matrix-unified tbody th:not(.ref-hour-treatment-merged){text-align:left;padding-left:8px;font-size:10px}
 #refHeureTableWrap .ref-hour-matrix-unified tbody td{font-size:9px;padding:8px 1px}
 @media(max-width:700px){#refHeureTableWrap .ref-hour-matrix-unified{min-width:900px}#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged{width:44px;min-width:44px;max-width:44px}#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged span{font-size:10px}}
+
+/* V15 — affichage compact des deux références pour limiter l'espace occupé */
+#calculsView{padding-top:14px!important;padding-bottom:18px!important}
+#calculsView .calculation-tabs{margin-bottom:12px;padding:4px;gap:6px;border-radius:12px}
+#calculsView .calculation-tab{min-height:34px;padding:7px 13px;font-size:11px;border-radius:8px}
+#calculsView .calculation-tab.active:before{width:5px;height:5px;margin-right:7px}
+#calculsView .calculation-panel .mb-6{margin-bottom:12px!important}
+#calculsView h1{font-size:22px!important;line-height:1.2}
+#calculsView h2{font-size:14px!important}
+#calculsView .eyebrow{font-size:9px}
+#calculsView p{line-height:1.4}
+#calculsView #refGlobalPanel>section,
+#calculsView #referenceHeureCanalSection{padding:12px!important;border-radius:14px}
+#calculsView #refGlobalPanel>section.mb-5,
+#calculsView #refHeurePanel section.mb-5{margin-bottom:10px!important}
+#calculsView #refGlobalPanel .grid.grid-cols-1,
+#calculsView #refHeurePanel .grid.grid-cols-1{gap:8px!important;margin-bottom:10px!important}
+#calculsView #refGlobalPanel article,
+#calculsView #refHeurePanel article{padding:9px 11px!important;border-radius:11px}
+#calculsView #refGlobalPanel article strong,
+#calculsView #refHeurePanel article strong{font-size:18px!important;margin-top:3px!important}
+#calculsView .week-picker-trigger{min-height:42px;padding:7px 10px}
+#calculsView .week-picker-hint{padding-bottom:4px}
+#refCanalTableWrap{max-height:460px!important}
+#refCanalTableWrap table.data-table{min-width:820px!important}
+#refCanalTableWrap table.data-table th,
+#refCanalTableWrap table.data-table td{padding:7px 8px!important;font-size:10px!important;line-height:1.2}
+#refCanalTableWrap table.data-table thead th{font-size:9px!important}
+#refCanalTableWrap table.data-table th:first-child,
+#refCanalTableWrap table.data-table td:first-child{min-width:145px;max-width:190px;white-space:normal}
+#refHeureTableWrap{max-height:500px!important}
+#refHeureTableWrap .ref-hour-matrix-unified{min-width:850px!important;border-spacing:1px!important}
+#refHeureTableWrap .ref-hour-matrix-unified thead th{padding:6px 1px!important;font-size:8px!important}
+#refHeureTableWrap .ref-hour-matrix-unified tbody th:not(.ref-hour-treatment-merged){padding:5px 5px!important;font-size:8px!important}
+#refHeureTableWrap .ref-hour-matrix-unified tbody td{padding:5px 0!important;font-size:7px!important;line-height:1.05!important}
+#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged{width:40px!important;min-width:40px!important;max-width:40px!important;padding:5px 2px!important}
+#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged span{font-size:9px!important;max-height:150px!important}
+#calculsView .notice{margin-top:10px!important;padding:9px 12px!important;font-size:10px}
+#calculsView #refCanalPeriod,#calculsView #refHeurePeriod{font-size:9px}
+@media(max-width:700px){
+ #calculsView{padding-left:10px!important;padding-right:10px!important}
+ #refCanalTableWrap,#refHeureTableWrap{max-height:420px!important}
+ #refCanalTableWrap table.data-table{min-width:760px!important}
+ #refHeureTableWrap .ref-hour-matrix-unified{min-width:820px!important}
+}
+
+/* V16 — filtres et KPI alignés, tableaux plus lisibles */
+#calculsView .reference-toolbar{display:grid;grid-template-columns:minmax(260px,0.85fr) minmax(500px,1.65fr);gap:12px;align-items:stretch;margin-bottom:14px}
+#calculsView .reference-toolbar>section{margin:0!important;padding:10px 12px!important;display:flex;align-items:center}
+#calculsView .reference-toolbar>section>div{width:100%}
+#calculsView .reference-toolbar .week-picker-trigger{min-height:48px}
+#calculsView .reference-toolbar .week-picker-hint{font-size:9px;white-space:nowrap}
+#calculsView .reference-toolbar>.mb-5.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px!important;margin:0!important;align-self:stretch}
+#calculsView .reference-toolbar article{min-width:0;display:flex;flex-direction:column;justify-content:center;padding:10px 12px!important}
+#calculsView .reference-toolbar article>div{font-size:9px!important;line-height:1.25;letter-spacing:.02em}
+#calculsView .reference-toolbar article strong{font-size:21px!important;line-height:1.15;margin-top:5px!important}
+#calculsView .reference-toolbar article small{font-size:9px!important;line-height:1.25}
+/* Tableaux : plus d'air et chiffres plus faciles à lire */
+#refCanalTableWrap{max-height:620px!important}
+#refCanalTableWrap table.data-table{min-width:900px!important;border-collapse:separate;border-spacing:0}
+#refCanalTableWrap table.data-table th,#refCanalTableWrap table.data-table td{padding:11px 12px!important;font-size:12px!important;line-height:1.4!important}
+#refCanalTableWrap table.data-table thead th{font-size:11px!important;padding-top:12px!important;padding-bottom:12px!important}
+#refCanalTableWrap table.data-table tbody tr{height:42px}
+#refHeureTableWrap{max-height:620px!important}
+#refHeureTableWrap .ref-hour-matrix-unified{min-width:1120px!important;border-spacing:3px!important}
+#refHeureTableWrap .ref-hour-matrix-unified thead th{padding:11px 3px!important;font-size:10px!important}
+#refHeureTableWrap .ref-hour-matrix-unified tbody th:not(.ref-hour-treatment-merged){padding:9px 8px!important;font-size:11px!important}
+#refHeureTableWrap .ref-hour-matrix-unified tbody td{padding:10px 2px!important;font-size:10px!important;line-height:1.2!important;min-height:36px}
+#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged{width:52px!important;min-width:52px!important;max-width:52px!important;padding:9px 4px!important}
+#refHeureTableWrap .ref-hour-matrix-unified .ref-hour-treatment-merged span{font-size:10px!important;max-height:190px!important}
+@media(max-width:1050px){#calculsView .reference-toolbar{grid-template-columns:1fr}#calculsView .reference-toolbar>.mb-5.grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:620px){#calculsView .reference-toolbar>.mb-5.grid{grid-template-columns:1fr}#calculsView .reference-toolbar article{min-height:76px}#calculsView .reference-toolbar .week-picker-hint{white-space:normal}}
